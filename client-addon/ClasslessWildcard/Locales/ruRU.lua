@@ -964,6 +964,7 @@ ClasslessWildcardLocaleData_ruRU = {
         ["+%.1f health/5s"] = "+%.1f здоровья/5с",
         ["+%.1f mana per 5 sec"] = "+%.1f маны за 5 с",
         ["+%.1f health per 5 sec"] = "+%.1f здоровья за 5 с",
+        ["becomes "] = "станет ",
         ["|cff00ff00Sent to your raid.|r"] = "|cff00ff00Отправлено рейду.|r",
         ["|cff00ff00Sent to your party.|r"] = "|cff00ff00Отправлено группе.|r",
         ["Unnamed build"] = "Сборка без названия",

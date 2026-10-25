@@ -4964,7 +4964,6 @@ function CW.StatEffects(i, value, short)
     local SP = short and CWText(" SP") or CWText(" spell power")
     local CRIT = short and CWText("%% crit") or CWText("%% critical strike")
     local SCRIT = short and CWText("%% spell crit") or CWText("%% spell critical strike")
-    local PER5 = short and CWText("/5s") or CWText(" per 5 sec")
 
     if i == 1 then
         out[#out + 1] = "+" .. math.floor(value * (s.strMeleeAP or 2)) .. CWText(" melee") .. AP
@@ -5018,8 +5017,13 @@ function CW.StatEffects(i, value, short)
         end
     elseif i == 5 then
         if (s.mp5PerSpi or 0) > 0 then
-            out[#out + 1] = string.format(CWText("+%.1f mana" .. PER5), value * s.mp5PerSpi)
-            out[#out + 1] = string.format(CWText("+%.1f health" .. PER5), value * (s.hp5PerSpi or 0))
+            if short then
+                out[#out + 1] = string.format(CWText("+%.1f mana/5s"), value * s.mp5PerSpi)
+                out[#out + 1] = string.format(CWText("+%.1f health/5s"), value * (s.hp5PerSpi or 0))
+            else
+                out[#out + 1] = string.format(CWText("+%.1f mana per 5 sec"), value * s.mp5PerSpi)
+                out[#out + 1] = string.format(CWText("+%.1f health per 5 sec"), value * (s.hp5PerSpi or 0))
+            end
         else
             out[#out + 1] = CWText("mana and health regeneration")
         end
@@ -5600,7 +5604,7 @@ local function RenderTalPane()
                 local cost = CW.talentCost or 1
                 local costText = string.format(CWText("%d Talent Essence"), cost)
                     .. (CW.talentFlat and CWText(" (all ranks)") or CWText("/rank"))
-                w.sub:SetText(typeTag .. string.format(CWText("Tier %d"), t.row + 1) .. CWText(" · ") .. costText .. LevelTag(tlvl, s.level))
+                w.sub:SetText(typeTag .. string.format(CWText("Tier %d"), t.row + 1) .. ", " .. costText .. LevelTag(tlvl, s.level))
                 if t.owned >= t.max then
                     w.tipLine = "Maxed"
                 elseif s.mode ~= 0 then
@@ -5926,7 +5930,7 @@ local function RenderStats()
         local reborn = CW.stats.rebirth and CW.stats.rebirth[i] or 0
         if reborn > 0 then head = head .. "  |cffff8800+" .. reborn .. " Rebirth|r" end
         if delta ~= 0 then
-            head = head .. "  |cffffd100becomes " .. after .. "|r"
+            head = head .. "  |cffffd100" .. CWText("becomes ") .. after .. "|r"
         end
         r.label:SetText(head)
         -- and what that total is worth, projected to the pending value so the
@@ -10153,7 +10157,7 @@ local function HandleMessage(msg)
             gold = tonumber(p[5]) or 0, rule = p[6] or "",
             best = tonumber(p[7]) or 0, finished = tonumber(p[8]) or 0,
             reward = tonumber(p[9]) or 0,   -- the ability it pays, a spell id
-            title = p[10] or "",            -- "%s the Nemesis", as the client shows it
+            title = CWText(p[10] or ""),     -- challenge title; localized by its exact server-provided name
             path = tonumber(p[11]) or 255,  -- the path it asks for: 0, 1, or 255 for either
             vengeance = tonumber(p[12]) or 0,   -- Vengeance it asks for besides the level cap
             detail = "",                    -- how it plays, joined from CD pieces
