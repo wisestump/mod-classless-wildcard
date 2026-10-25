@@ -3363,7 +3363,7 @@ namespace
           "Pull one enemy at a time and rest between fights. Stuns, fears, slows and snares matter far more than usual. Anything that would be a fair fight on your own is now a group fight, so find others for it.",
           Mode::Unchosen, { "Элитный мир",
             "Каждый противник для вас становится элитным: у него элитные здоровье, урон и награда опытом.",
-            "Каждый противник, с которым вы можете сразиться, становится элитным только для вас, как только появляется в поле зрения. У него будет здоровье, заданное для элитных противников этого мира, и элитная рамка цели; он будет наносить вам и питомцу элитный урон в ближнем бою и заклинаниями, потребует столько же ударов для победы и даст элитный опыт. Снаряжение будет выпадать с обычной для редких противников вероятностью, включая фамильные вещи. Редкие существа станут редкими элитными. Уже элитные противники, редкие элиты и боссы не изменятся, в том числе в подземельях; питомцы, тотемы, призванные существа, мелкие животные и гражданские NPC тоже не изменятся. Другие игроки видят противников обычными. Сражайтесь по одному и используйте оглушения, замедления и опутывания.",
+            "Каждый противник, с которым вы можете сразиться, становится элитным только для вас, как только появляется в поле зрения. У него будет здоровье, заданное для элитных противников этого мира, и элитная рамка цели; он будет наносить вам и питомцу элитный урон в ближнем бою и заклинаниями, потребует столько же ударов для победы и даст элитный опыт. Снаряжение будет выпадать с обычной для редких противников вероятностью, включая фамильные предметы. Редкие существа станут редкими элитными. Уже элитные противники, редкие элиты и боссы не изменятся, в том числе в подземельях; питомцы, тотемы, призванные существа, мелкие животные и гражданские NPC тоже не изменятся. Другие игроки видят противников обычными. Сражайтесь по одному и используйте оглушения, замедления и опутывания.",
             "Сражайтесь по одному противнику и отдыхайте между боями. Оглушения, страх, замедления и опутывания гораздо важнее обычного. Противник, с которым вы справлялись в одиночку, теперь потребует группы — найдите союзников." } },
         { 14, "legion",          "Legion",          4, "Every enemy calls two more of its kind to its side the first time it engages you. More to kill, more XP, more ways to die.", 650, 191, "one_against_many",
           "The first time an enemy engages you or your pet, two more of its kind appear beside it and join the fight. An enemy calls only once in its life, even if it resets and is pulled again. They give experience and loot like any other of their kind, and leave after five minutes out of combat. The reinforcements fight only you, so no one else can harm them and they harm no one else. Reinforcements never call reinforcements of their own. Bosses, critters, civilians, pets, totems and summoned creatures never call at all.",
@@ -3431,8 +3431,8 @@ namespace
         { 21, "dealt_hand",      "Dealt Hand",      UNLIMITED_LIVES, "Wildcard Heroes only. Unlimited lives. No rerolls, starting hand included. You play every ability and talent the Wildcard deals you.", 500, 198, "loaded_die",
           "This run is for Wildcard Heroes, and it has unlimited lives, so a death never ends it. From the moment it starts nothing can be rerolled. Not the starting hand, not the abilities and talents dealt as you level, and no Reroll Scroll changes that. The reroll charges you earn each level still build up, and they are yours to spend when the run ends.",
           "Read every ability you are dealt and find the few that work together, then build around them. Talents are dealt too, so look over My Build after each level. Stat points are still yours to place, so use them to cover what the hand is missing.",
-          Mode::Wildcard, { "Рука судьбы",
-            "Только для героев случайного пути. Бесконечные жизни. Перебросы запрещены, включая стартовую руку. Вы играете всеми способностями и талантами, которые выдаёт случайный путь.",
+          Mode::Wildcard, { "Что выпало, то выпало",
+            "Только для героев случайного пути. Бесконечные жизни. Перебросы запрещены, включая стартовый набор. Вы играете всеми способностями и талантами, которые выдаёт случайный путь.",
             "Это испытание доступно героям случайного пути и даёт бесконечные жизни: смерть не завершает забег. С его начала запрещены любые перебросы — стартовой руки, способностей и талантов, получаемых при повышении уровня. Свиток переброса тоже не поможет. Заряды переброса продолжат накапливаться за уровни; использовать их можно будет после завершения испытания.",
             "Изучайте каждую выданную способность и ищите сочетания, на которых можно построить сборку. Таланты тоже выдаются случайно, поэтому после каждого уровня проверяйте свою сборку. Очки характеристик распределяйте сами — ими можно компенсировать слабые стороны полученной руки." } },
         { 3,  "hardcore",        "Hardcore",        1, "One life, plus your extra life if you hold one. When it is gone the run ends.", 1000, 188, "last_breath",
@@ -4075,7 +4075,7 @@ std::string ClasslessMgr::NemesisStrengthName(uint8 strength, Player* player)
     static char const* const english[NS_COUNT] = { "", "Bloodlust", "Ironhide", "Spellward", "Venomous",
                                                     "Unyielding", "Warband", "Relentless" };
     static char const* const russian[NS_COUNT] = { "", "Жажда крови", "Железная шкура", "Защита от магии", "Ядовитость",
-                                                    "Несгибаемость", "Стая", "Неутомимость" };
+                                                    "Несгибаемость", "Боевой отряд", "Неутомимость" };
     if (strength >= NS_COUNT)
         return {};
     return IsRussian(player) ? russian[strength] : english[strength];
@@ -8848,7 +8848,7 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
     if (OnRun(player, ChallengeId::DealtHand))
     {
         if (err) *err = LocaleText(player, "No rerolls on Dealt Hand. You play what you are dealt.",
-            "В испытании «Сданная рука» перебросы запрещены. Играйте тем, что получили.");
+            "В испытании «Что выпало, то выпало» перебросы запрещены. Играйте тем, что получили.");
         return false;
     }
 
@@ -9035,7 +9035,7 @@ uint32 ClasslessMgr::RerollUnlockedAbilities(Player* player, std::string* err)
     if (OnRun(player, ChallengeId::DealtHand))
     {
         if (err) *err = LocaleText(player, "No rerolls on Dealt Hand. You play what you are dealt.",
-            "В испытании «Сданная рука» перебросы запрещены. Играйте тем, что получили.");
+            "В испытании «Что выпало, то выпало» перебросы запрещены. Играйте тем, что получили.");
         return 0;
     }
 

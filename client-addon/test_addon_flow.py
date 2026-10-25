@@ -5348,7 +5348,7 @@ def test_locale_selection():
              "ruRU localizes a slash-command response")
     ru.rt.execute("ERRORS = {}; UIErrorsFrame = { AddMessage = function(self, m) table.insert(ERRORS, m) end }")
     ru.CW.SayNoRerolls()
-    ru.check("Сданный набор нельзя перебросить." in str(ru.g.ERRORS[1]),
+    ru.check("Что выпало, то выпало" in str(ru.g.ERRORS[1]),
              "ruRU localizes a visible local error")
     ru.rt.execute("ClasslessWildcard_API.ReadNemesisTraitNums({'NX', '5'})")
     ru.check("на 5% быстрее" in str(ru.CW.NemesisTraitText(54060)) and

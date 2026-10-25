@@ -30,7 +30,7 @@
     "Last Breath": "Последний вдох",
     "Last Reserve": "Последний резерв",
     "Leather Armor": "Кожаный доспех",
-    "Loaded Die": "Подвешенная кость",
+    "Loaded Die": "Шулерская кость",
     "Long Reach": "Дальнобойность",
     "Mail Armor": "Кольчужный доспех",
     "Makeshift Strike": "Импровизированный удар",
@@ -83,8 +83,12 @@
     "Wildcard Surge": "Всплеск случайного пути"
   },
   "rank_texts": {
-    "Rank 1": "Ранг 1", "Rank 2": "Ранг 2", "Rank 3": "Ранг 3",
-    "Rank 4": "Ранг 4", "Rank 5": "Ранг 5", "Rank 6": "Ранг 6",
+    "Rank 1": "Ранг 1",
+    "Rank 2": "Ранг 2",
+    "Rank 3": "Ранг 3",
+    "Rank 4": "Ранг 4",
+    "Rank 5": "Ранг 5",
+    "Rank 6": "Ранг 6",
     "Rank 7": "Ранг 7"
   },
   "texts": {
@@ -129,7 +133,7 @@
     "Increases the radius of Wide Arc, Fistful of Grit, Vertigo, Overflow and Sinkhole by $s1%.": "Увеличивает радиус «Широкой дуги», «Пригоршни песка», «Головокружения», «Перелива» и «Провала» на $s1%.",
     "Increases the radius of everything you place by $s1%.": "Увеличивает радиус всех установленных вами объектов на $s1%.",
     "Increases the range of Hurl, Ricochet Shot, Overflow, Quicksilver, Sinkhole, Reclaimed Sentry and Rattle by $s1%.": "Увеличивает дальность «Метания», «Рикошетного выстрела», «Перелива», «Ртути», «Провала», «Восстановленного часового» и «Тряски» на $s1%.",
-    "Increases your damage and healing by $s1% for every $s2 different classes you have an ability from.": "Увеличивает наносимый урон и эффективность исцеления на $s1% за каждый из $s2 классов, способности которых вам известны.",
+    "Increases your damage and healing by $s1% for every $s2 different classes you have an ability from.": "Увеличивает наносимый урон и эффективность исцеления на $s1% за каждые $s2 разных классов, способности которых вы изучили.",
     "Increases your movement speed by $s1% and restores $s2 mana every 5 sec for $d.": "На $d увеличивает скорость передвижения на $s1% и восстанавливает $s2 маны каждые 5 сек.",
     "Instantly restores $s1 energy and $/10;s2 rage.": "Мгновенно восстанавливает $s1 ед. энергии и $/10;s2 ед. ярости.",
     "Interrupts the target's spellcasting and prevents any spell in that school from being cast for $d. The target also casts $s2% slower for $d.": "Прерывает произнесение заклинания и не позволяет применять заклинания этой школы в течение $d. Скорость произнесения заклинаний цели также снижена на $s2% на $d.",
@@ -174,7 +178,7 @@
     "Taunts the target to attack you for $d.": "Провоцирует цель атаковать вас в течение $d.",
     "The arcane half of Crossdraw.": "Чародейская половина «Перекрёстного выпада».",
     "Throws a handful of grit in front of you, blinding enemies in a $a1 yard cone and slowing them by $s1% for $d. Any damage ends the blind.": "Бросает перед вами пригоршню песка, ослепляя противников в конусе длиной $a1 м и замедляя их на $s1% на $d. Любой урон прекращает ослепление.",
-    "Throws a loaded die at the target. It rolls 1 to $s2 and deals $s1 Holy damage for each point it shows. A roll of 1 is thrown again, once. A roll of $s2 returns the die to your hand, and the cooldown is reset.": "Бросает в цель заряженную кость. Выпадает от 1 до $s2, нанося $s1 ед. урона светом за каждое очко. При выпадении 1 кость бросается ещё раз. При выпадении $s2 кость возвращается в руку, а время восстановления сбрасывается.",
+    "Throws a loaded die at the target. It rolls 1 to $s2 and deals $s1 Holy damage for each point it shows. A roll of 1 is thrown again, once. A roll of $s2 returns the die to your hand, and the cooldown is reset.": "Бросает в цель шулерскую кость. Выпадает от 1 до $s2, нанося $s1 ед. урона светом за каждое очко. При выпадении 1 кость бросается ещё раз. При выпадении $s2 кость возвращается в руку, а время восстановления сбрасывается.",
     "Time snaps back.": "Время отматывается назад.",
     "What the armor you wear gives and costs. Plate and mail slow casting a lot and attacks a little, leather quickens attacks and dodging and slows casting a little, cloth sharpens spells and mana. Each piece counts toward its type.": "Преимущества и недостатки вашей брони. Латы и кольчуга сильно замедляют заклинания и немного — атаки; кожа ускоряет атаки и уклонение, слегка замедляя заклинания; ткань усиливает заклинания и восстановление маны. Учитывается каждая вещь.",
     "When Ward Off's shield is absorbed to the last point, $s1% of its cooldown is refunded.": "Если щит «Отвести удар» полностью поглощён, время восстановления способности сокращается на $s1%.",

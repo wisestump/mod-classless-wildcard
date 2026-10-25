@@ -75,7 +75,7 @@ namespace ClasslessWildcard
             { "That talent is already at max rank.", "Этот талант уже достиг максимального ранга." },
             { "Unknown talent.", "Неизвестный талант." },
             { "Rerolls are a Wildcard mechanic.", "Перебросы доступны только на случайном пути." },
-            { "No rerolls on Dealt Hand. You play what you are dealt.", "В испытании «Сданная рука» перебросы запрещены. Играйте тем, что получили." },
+            { "No rerolls on Dealt Hand. You play what you are dealt.", "В испытании «Что выпало, то выпало» перебросы запрещены. Играйте тем, что получили." },
             { "That ability is locked. Unlock it first.", "Эта способность закреплена. Сначала открепите её." },
             { "That ability came with a talent. Reroll the talent instead.",
               "Эта способность получена вместе с талантом. Перебросьте сам талант." },

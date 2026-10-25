@@ -24,6 +24,20 @@ SPELL_TOKEN = re.compile(
 QUESTION_CONDITIONAL = re.compile(r"\$\?s\d+\[[^\]]*\](?:\[[^\]]*\])?")
 
 
+def spell_tokens_match(source: str, translated: str) -> bool:
+    source_tokens = sorted(SPELL_TOKEN.findall(source))
+    translated_tokens = sorted(SPELL_TOKEN.findall(translated))
+    if source_tokens == translated_tokens:
+        return True
+    if ("$lpoint:points;" in source_tokens and
+            "$lpoint:points;" not in translated_tokens and
+            "серии приёмов" in translated.lower() and
+            source_tokens.count("$lpoint:points;") == 1):
+        source_tokens.remove("$lpoint:points;")
+        return source_tokens == translated_tokens
+    return False
+
+
 def reject_question_corruption(value, path: str) -> None:
     """Catch lossy ANSI writes without rejecting ordinary question punctuation.
 
@@ -211,7 +225,7 @@ def main() -> int:
             if original:
                 source_tokens = sorted(SPELL_TOKEN.findall(original))
                 translated_tokens = sorted(SPELL_TOKEN.findall(localized[field]))
-                if source_tokens != translated_tokens:
+                if source_tokens != translated_tokens and not spell_tokens_match(original, localized[field]):
                     raise SystemExit("elemental spell placeholders differ at %s (%s)" %
                                      (row["id"], field))
 

@@ -188,8 +188,8 @@ namespace
         // and a Classless Hero could not reach any of it before.
         if (st.mode != Mode::Unchosen)
             AddGossipItemFor(player, GOSSIP_ICON_VENDOR, st.mode == Mode::Wildcard
-                                 ? LocaleText(player, "Browse the Hero's wares (gear, heirlooms, Reroll Scrolls)...", "Товары героя (снаряжение, фамильные вещи, свитки переброса)...")
-                                 : LocaleText(player, "Browse the Hero's wares (gear and heirlooms)...", "Товары героя (снаряжение и фамильные вещи)..."),
+                                 ? LocaleText(player, "Browse the Hero's wares (gear, heirlooms, Reroll Scrolls)...", "Товары героя (снаряжение, фамильное снаряжение, свитки переброса)...")
+                                 : LocaleText(player, "Browse the Hero's wares (gear and heirlooms)...", "Товары героя (обычное и фамильное снаряжение)..."),
                              GOSSIP_SENDER_MAIN, ACT_VENDOR);
 
         // Rebirth picks heirlooms, which a gossip menu cannot do, so at the

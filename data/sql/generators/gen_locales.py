@@ -134,7 +134,7 @@ def item_rows() -> list[dict[str, object]]:
 
 
 def item_locale(row: dict[str, object], catalog: dict) -> dict[str, str] | None:
-    """Resolve explicit id translations, reusable templates, and tier prefixes."""
+    """Resolve explicit id translations, reusable templates, and tier suffixes."""
     entry, name, description = str(row["entry"]), str(row["name"]), str(row["description"])
     explicit = catalog.get("items", {}).get(entry)
     if explicit:
@@ -145,22 +145,22 @@ def item_locale(row: dict[str, object], catalog: dict) -> dict[str, str] | None:
         return {"name": templates["special_names"][name],
                 "description": templates.get("special_descriptions", {}).get(description, "")}
 
-    tier_prefixes = templates.get("tier_prefixes", {})
-    for prefix in sorted(tier_prefixes, key=len, reverse=True):
+    tier_suffixes = templates.get("tier_suffixes", {})
+    for prefix in sorted(tier_suffixes, key=len, reverse=True):
         marker = prefix + " "
         if name.startswith(marker):
             base = name[len(marker):]
             translated = templates.get("names", {}).get(base)
             translated_desc = templates.get("descriptions", {}).get(description)
             if translated and (not description or translated_desc):
-                return {"name": tier_prefixes[prefix] + ": " + translated,
+                return {"name": translated + " " + tier_suffixes[prefix],
                         "description": translated_desc or ""}
             return None
 
     trophy = re.fullmatch(r"Trophy of (Bloodlust|Ironhide|Spellward|Venomous|Unyielding|Warband|Relentless) (I{1,3})", name)
     if trophy:
         trophy_map = templates.get("nemesis_trophies", {})
-        title = trophy_map.get(trophy.group(1))
+        title = templates.get("nemesis_trophy_genitives", {}).get(trophy.group(1))
         description_match = re.match(r"(\d+) stars? of (.+?)\. Works from your bags on a Nemesis run\. It cannot leave your bags\.", description)
         if title and description_match:
             effects = trophy_map.get("effects", {})

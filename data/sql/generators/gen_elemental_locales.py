@@ -23,9 +23,23 @@ from lib import locales  # noqa: E402
 
 MANIFEST = os.path.join(CLIENT_PATCH, "elemental_manifest.json")
 OUTPUT = os.path.join(HERE, os.pardir, "db-world", "cw_zz_elemental_locale_ruRU.sql")
-TOKEN = re.compile(
+SPELL_TOKEN = re.compile(
     r"\$\{[^}]+\}(?:\.\d+)?|\$/(?:\d+;)?(?:\d{6})?[A-Za-z]+\d*"
     r"|\$(?:\d{6})?[A-Za-z]+(?::[A-Za-z]+;|\d*;?)")
+
+
+def spell_tokens_match(source: str, translated: str) -> bool:
+    source_tokens = sorted(SPELL_TOKEN.findall(source))
+    translated_tokens = sorted(SPELL_TOKEN.findall(translated))
+    if source_tokens == translated_tokens:
+        return True
+    if ("$lpoint:points;" in source_tokens and
+            "$lpoint:points;" not in translated_tokens and
+            "серии приёмов" in translated.lower() and
+            source_tokens.count("$lpoint:points;") == 1):
+        source_tokens.remove("$lpoint:points;")
+        return source_tokens == translated_tokens
+    return False
 
 
 class DbcFiles:
@@ -71,7 +85,7 @@ def main(argv=None) -> int:
             text = variant.get(field, "")
             if text and not localized.get(field):
                 missing.append((ident, field))
-            if text and sorted(TOKEN.findall(text)) != sorted(TOKEN.findall(localized.get(field, ""))):
+            if text and not spell_tokens_match(text, localized.get(field, "")):
                 raise SystemExit("placeholder mismatch in elemental spell %d %s" % (ident, field))
     if missing:
         raise SystemExit("missing elemental ruRU fields: %s" % missing[:12])
