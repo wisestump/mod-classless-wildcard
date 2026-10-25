@@ -568,7 +568,7 @@ function CW.UpdateLives()
         return
     end
     local c = CW.challengesById and CW.challengesById[s.run]
-    CW.runText:SetText(CWText("|cffff5544") .. (c and c.name or ("Challenge " .. s.run)) .. "|r")
+    CW.runText:SetText(CWText("|cffff5544") .. (c and c.name or string.format(CWText("Challenge %d"), s.run)) .. "|r")
     b.icon:SetTexture(c and (c.reward or 0) > 0 and SpellIcon(c.reward) or "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01")
     local n = CW.PipCount(s.livesMax, #icons)
     for i = 1, #icons do
@@ -1201,7 +1201,7 @@ do
     fly.subtitle:SetJustifyH("LEFT")
 
     -- the rank this Rebirth brings, from the realm's own numbers
-    SectionHeader("Your rank after this Rebirth", -70)
+    SectionHeader(CWText("Your rank after this Rebirth"), -70)
     fly.rankRows = {}
     for i = 1, 3 do
         local y = -92 - (i - 1) * 18
@@ -1228,7 +1228,7 @@ do
         .. CWText("|cffffd100Reset:|r your level, build and stat points. Worn gear goes into your bags, or by mail if they are full.\n")
         .. CWText("|cffffd100Quests:|r you choose next whether they are wiped or kept."))
 
-    SectionHeader("Heirlooms", -222)
+    SectionHeader(CWText("Heirlooms"), -222)
     fly.count = fly:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     fly.count:SetPoint("TOPRIGHT", -PAD, -222)
     fly.count:SetJustifyH("RIGHT")
@@ -1331,10 +1331,10 @@ do
             or "|cffff8800" .. CWText("Wildcard") .. "|r"
         fly.subtitle:SetText(string.format(CWText("A new life begins at level 1 on your %s path."), path))
         -- the same formulas as RebirthXpPct and ApplyRebirthMods
-        fly.rankRows[1].value:SetText(CWText("+") .. math.min(r.xpFirst + r.xpPerRank * (rank - 1), r.xpMax) .. "% XP")
-        fly.rankRows[2].value:SetText(CWText("+") .. math.min(r.otherXpPerRank * rank, r.otherXpMax) .. "% XP")
+        fly.rankRows[1].value:SetText(CWText("+") .. math.min(r.xpFirst + r.xpPerRank * (rank - 1), r.xpMax) .. CWText("% XP"))
+        fly.rankRows[2].value:SetText(CWText("+") .. math.min(r.otherXpPerRank * rank, r.otherXpMax) .. CWText("% XP"))
         fly.rankRows[3].value:SetText(CWText("+") .. math.min(r.statPct * rank, r.statMax) .. "%")
-        fly.count:SetText(CWText("|cff00ff00") .. PickedCount() .. "|r of " .. max)
+        fly.count:SetText(CWText("|cff00ff00") .. PickedCount() .. CWText("|r of ") .. max)
         fly.cost:SetText(CWText("Cost  |cffffffff") .. (s.rebirthPrice or 0) .. "|r |TInterface\\MoneyFrame\\UI-GoldIcon:14:14:2:0|t")
         if #list == 0 then fly.empty:Show() else fly.empty:Hide() end
         local total = math.max(1, math.ceil(#list / ROWS))
@@ -1348,7 +1348,7 @@ do
             if it then
                 r.id, r.spellId = it.id, it.id
                 r.icon:SetTexture(SpellIcon(it.id))
-                r.name:SetText(SpellLabel(it.id, it.rarity) .. (it.source == 4 and "  |cffff8800heirloom|r" or ""))
+                r.name:SetText(SpellLabel(it.id, it.rarity) .. (it.source == 4 and "  |cffff8800" .. CWText("heirloom") .. "|r" or ""))
                 if fly.picked[it.id] then
                     r.check:Show()
                     r.stripe:SetVertexColor(1, 0.82, 0.3, 0.16)
@@ -1669,7 +1669,7 @@ do
     -- absent from older servers and read as nothing new.
     function CW.RunEndSpec(p)
         local finished, level = tonumber(p[2]) == 1, tonumber(p[3]) or 1
-        local shards, gold, name = tonumber(p[4]) or 0, tonumber(p[5]) or 0, p[6] or "Challenge"
+        local shards, gold, name = tonumber(p[4]) or 0, tonumber(p[5]) or 0, p[6] or CWText("Challenge")
         local id, left, max = tonumber(p[7]) or 0, tonumber(p[8]) or 0, tonumber(p[9]) or 0
         local reward, title, unbroken = tonumber(p[10]) or 0, p[11] or "", p[12] or ""
         local repeatRun = tonumber(p[13]) == 1
@@ -1933,7 +1933,7 @@ do
     local function Header(text)
         local h = C:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         h:SetJustifyH("LEFT")
-        h:SetText(text)
+        h:SetText(CWText(text))
         h.line = C:CreateTexture(nil, "ARTWORK")
         h.line:SetHeight(1)
         h.line:SetTexture(1, 0.82, 0.2, 0.25)
@@ -2719,7 +2719,7 @@ local function FillArchRows(L, list, onChoose, x, top, key)
             if (arch.ranks or 0) > 0 then
                 count = count .. CountText(arch.ranks, ", %d talent rank", ", %d talent ranks few", ", %d talent ranks")
             end
-            r.name:SetText(CWText("|cffffd100") .. arch.name .. "|r" .. (arch.following and "  |cff00ff00Following|r" or ""))
+            r.name:SetText(CWText("|cffffd100") .. arch.name .. "|r" .. (arch.following and "  |cff00ff00" .. CWText("Following") .. "|r" or ""))
             r.desc:SetText(arch.desc)
             r.counts:SetText(CWText("|cff999999") .. count .. "|r")
             r.apply:SetText(CWText(arch.following and "Stop" or r.apply.defaultText))
@@ -2942,7 +2942,7 @@ do
     function CW.DecodeBuild(code)
         code = (code or ""):gsub("%s", "")
         if code:sub(1, #PREFIX) ~= PREFIX then
-            return nil, "That is not a build code. Build codes start with " .. PREFIX
+            return nil, string.format(CWText("That is not a build code. Build codes start with %s"), PREFIX)
         end
         code = code:sub(#PREFIX + 1)
         if #code % 4 == 1 then return nil, "The code is incomplete. Copy all of it." end
@@ -3159,7 +3159,7 @@ do
         if not d or not d.done or not CW.OpenBuildEditor then return end
         -- every entry at the level the archetype buys it at, held there when
         -- that is later than the level it becomes available at
-        local b = { name = (P.arch and P.arch.name or "Build") .. " (copy)", desc = P.arch and P.arch.desc or "",
+        local b = { name = (P.arch and P.arch.name or CWText("Build")) .. CWText(" (copy)"), desc = P.arch and P.arch.desc or "",
                     abilities = {}, talents = {}, waitA = {}, waitT = {} }
         CW.abilityInfo = CW.abilityInfo or {}
         CW.talentInfo = CW.talentInfo or {}
@@ -3484,7 +3484,7 @@ do
         CW.ArchTabsRefresh()
         local s = CW.state
         local builds = CW.SavedBuilds()
-        fly.intro:SetText(MINE_INTRO)
+        fly.intro:SetText(CWText(MINE_INTRO))
         local top = 62 + math.max(12, fly.intro:GetStringHeight() or 0) + 12
         fly.bar:ClearAllPoints()
         fly.bar:SetPoint("TOPLEFT", 18, -top)
@@ -3495,7 +3495,7 @@ do
             local count, ranks = Counts(b)
             list[i] = {
                 id = 0, build = b, index = i,
-                name = CW.CleanBuildText(b.name, NAME_MAX), desc = b.desc ~= "" and b.desc or "No description.",
+                name = CW.CleanBuildText(b.name, NAME_MAX), desc = b.desc ~= "" and b.desc or CWText("No description."),
                 count = count, ranks = ranks,
                 following = (s.customName or "") ~= "" and s.customName == CW.CleanBuildText(b.name, NAME_MAX),
             }
@@ -3556,8 +3556,8 @@ do
             for id, rank in string.gmatch(p[2] or "", "(%d+):(%d+),") do tinsert(m.talents, { tonumber(id), tonumber(rank) }) end
         else
             CW.awaitMine = nil
-            local who = UnitName("player") or "My"
-            CW.OpenBuildEditor({ name = who .. "'s build", desc = "", abilities = m.abilities, talents = m.talents }, nil)
+            local who = UnitName("player") or CWText("Hero")
+            CW.OpenBuildEditor({ name = string.format(CWText("Build by %s"), who), desc = "", abilities = m.abilities, talents = m.talents }, nil)
         end
     end
 end
@@ -3673,8 +3673,7 @@ do
     E.fix:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(CWText("Fix order"))
-        GameTooltip:AddLine(CWText("Puts abilities in the order they unlock, ")
-            .. "caps ranks and drops repeats. Rows marked in red say what is wrong.", 1, 1, 1, true)
+        GameTooltip:AddLine(CWText("Puts abilities in the order they unlock, caps ranks and drops repeats. Rows marked in red say what is wrong."), 1, 1, 1, true)
         GameTooltip:Show()
     end)
     E.fix:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3988,7 +3987,7 @@ do
         local lv = Fit("A", id, FloorA(id))
         if not lv then
             tremove(E.build.abilities)
-            Refuse("Not enough Ability Essence for that by level " .. Cap() .. ".")
+            Refuse(string.format(CWText("Not enough Ability Essence for that by level %d."), Cap()))
             return
         end
         Waits(E.build)
@@ -4025,7 +4024,7 @@ do
         local lv = Fit("T", k, floor(k))
         if not lv then
             tremove(E.build.talents)
-            Refuse("Not enough Talent Essence for that by level " .. Cap() .. ".")
+            Refuse(string.format(CWText("Not enough Talent Essence for that by level %d."), Cap()))
             return
         end
         E.build.waitT[k] = lv > FloorT(tid) and lv or nil
@@ -4134,12 +4133,12 @@ do
         r.icon:SetWidth(16); r.icon:SetHeight(16)
         r.icon:SetPoint("LEFT", 40, 0)
         r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-        r.del = IconButton(r, "Interface\\Buttons\\UI-MinusButton", CTRL, "Take it out")
+        r.del = IconButton(r, "Interface\\Buttons\\UI-MinusButton", CTRL, CWText("Take it out"))
         r.del:SetPoint("RIGHT", -1, 0)
-        r.down = IconButton(r, "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton", CTRL + 2, "One level later")
+        r.down = IconButton(r, "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton", CTRL + 2, CWText("One level later"))
         r.down:SetPoint("RIGHT", r.del, "LEFT", 1, 0)
         r.down:SetDisabledTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Disabled")
-        r.up = IconButton(r, "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton", CTRL + 2, "One level sooner")
+        r.up = IconButton(r, "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton", CTRL + 2, CWText("One level sooner"))
         r.up:SetPoint("RIGHT", r.down, "LEFT", 3, 0)
         r.up:SetDisabledTexture("Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Disabled")
         r.rank = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -4225,7 +4224,7 @@ do
         r.levelBtn:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_LEFT")
             local free = step and step.free
-            GameTooltip:AddLine((free and "Comes free at level " or "Bought at level ") .. level(id))
+            GameTooltip:AddLine(CWText(free and "Comes free at level " or "Bought at level ") .. level(id))
             if free then
                 GameTooltip:AddLine(CWText("Another ability or talent in the build brings it, so it costs no essence."),
                     1, 1, 1, true)
@@ -4331,7 +4330,7 @@ do
             Arrows(r, "A", i)
             r.icon:SetTexture(SpellIcon(id))
             r.name:SetText(SpellLabel(id, step and step.rarity or 0))
-            r.SetRank(step and step.free and "|cffaaaaaafree|r" or "")
+            r.SetRank(step and step.free and ("|cffaaaaaa" .. CWText("free") .. "|r") or "")
             r:SetScript("OnClick", function(_, button) if button == "RightButton" then RemoveAbility(id) end end)
             r.up:SetScript("OnClick", function() Move("A", i, -1) end)
             r.down:SetScript("OnClick", function() Move("A", i, 1) end)
@@ -4358,7 +4357,7 @@ do
             WireLevel(r, "T", key, step)
             Arrows(r, "T", i)
             r.icon:SetTexture(info.spell and SpellIcon(info.spell) or "Interface\\Icons\\INV_Misc_QuestionMark")
-            r.name:SetText(info.spell and SpellLabel(info.spell, info.rarity or 0) or ("Talent " .. tid))
+            r.name:SetText(info.spell and SpellLabel(info.spell, info.rarity or 0) or (CWText("Talent ") .. tid))
             r.SetRank(t[2] .. "/" .. (info.max or "?"))
             r:SetScript("OnClick", function(_, button) if button == "RightButton" then RemoveRank(tid) end end)
             r.up:SetScript("OnClick", function() Move("T", i, -1) end)
@@ -4776,7 +4775,7 @@ do
             if InGroup() then S.go:Enable() else S.go:Disable() end
             S.go:SetScript("OnClick", function()
                 CW.SendBuildToGroup(S.code)
-                S.error:SetText(CWText("|cff00ff00Sent to your ") .. (InRaid() and "raid" or "party") .. ".|r")
+                S.error:SetText(CWText(InRaid() and "|cff00ff00Sent to your raid.|r" or "|cff00ff00Sent to your party.|r"))
             end)
             S.done:SetText(CLOSE or "Close")
             S:Show()
@@ -4792,7 +4791,7 @@ do
             S.go:SetScript("OnClick", function()
                 local build, why = CW.DecodeBuild(S.box:GetText())
                 if not build then
-                    S.error:SetText(CWText("|cffff5544") .. why .. "|r")
+                    S.error:SetText(CWText("|cffff5544") .. CWText(why) .. "|r")
                     return
                 end
                 S:Hide()
@@ -4834,7 +4833,8 @@ do
         incoming[sender] = nil
         local build = CW.DecodeBuild(table.concat(box.pieces))
         if not build then return end
-        local dlg = StaticPopup_Show("CW_CLASSLESS_SHAREDBUILD", sender, build.name ~= "" and build.name or "a build")
+        local dlg = StaticPopup_Show("CW_CLASSLESS_SHAREDBUILD", sender,
+            build.name ~= "" and build.name or CWText("Unnamed build"))
         if dlg then dlg.data = build end
     end
 end
@@ -5018,8 +5018,8 @@ function CW.StatEffects(i, value, short)
         end
     elseif i == 5 then
         if (s.mp5PerSpi or 0) > 0 then
-            out[#out + 1] = string.format("+%.1f mana" .. PER5, value * s.mp5PerSpi)
-            out[#out + 1] = string.format("+%.1f health" .. PER5, value * (s.hp5PerSpi or 0))
+            out[#out + 1] = string.format(CWText("+%.1f mana" .. PER5), value * s.mp5PerSpi)
+            out[#out + 1] = string.format(CWText("+%.1f health" .. PER5), value * (s.hp5PerSpi or 0))
         else
             out[#out + 1] = CWText("mana and health regeneration")
         end
@@ -5573,7 +5573,7 @@ local function RenderTalPane()
                 .. "|r  |cffaaaaaa(" .. within .. CWText(" of ") .. count .. ")|r")
         else
             treeText:SetText(CWText("|cffffd100") .. className
-                .. " tree " .. within .. CWText(" of ") .. count .. "|r")
+                .. CWText(" tree ") .. within .. CWText(" of ") .. count .. "|r")
         end
     else
         treeText:SetText(CWText("No trees loaded"))
@@ -5600,7 +5600,7 @@ local function RenderTalPane()
                 local cost = CW.talentCost or 1
                 local costText = string.format(CWText("%d Talent Essence"), cost)
                     .. (CW.talentFlat and CWText(" (all ranks)") or CWText("/rank"))
-                w.sub:SetText(typeTag .. string.format(CWText("Tier %d"), t.row + 1) .. "  " .. costText .. LevelTag(tlvl, s.level))
+                w.sub:SetText(typeTag .. string.format(CWText("Tier %d"), t.row + 1) .. CWText(" · ") .. costText .. LevelTag(tlvl, s.level))
                 if t.owned >= t.max then
                     w.tipLine = "Maxed"
                 elseif s.mode ~= 0 then
@@ -5710,11 +5710,11 @@ local function RenderBuild()
             r.note = nil
             if freebie then
                 suffix = suffix .. (it.source == 4 and ("  |cffff8800" .. CWText("heirloom") .. "|r")
-                                    or it.source == 3 and "  |cffaaaaaafree|r"
-                                    or "  |cffaaaaaatalent|r")
-                r.note = it.source == 4 and "Heirloom: carried through Rebirth, usable from level 1, never rerolled."
+                                    or it.source == 3 and ("  |cffaaaaaa" .. CWText("free") .. "|r")
+                                    or ("  |cffaaaaaa" .. CWText("talent") .. "|r"))
+                r.note = CWText(it.source == 4 and "Heirloom: carried through Rebirth, usable from level 1, never rerolled."
                     or it.source == 3 and "Came free with another ability, and leaves with it."
-                    or "Came with a talent, and leaves with it."
+                    or "Came with a talent, and leaves with it.")
             end
             r.name:SetWidth(freebie and (BUILD_W - 36) or (BUILD_W - 86))
             r.name:SetText(SpellLabel(it.spell, it.rarity) .. suffix)
@@ -5914,7 +5914,7 @@ local function RenderStats()
     local pending = PendingAlloc()
     local spent = PendingSpent()
     local unspent = CW.stats.budget - spent
-    statTitle:SetText(CWText("|cff00ff00") .. unspent .. "|r of " .. CW.stats.budget .. " unspent")
+    statTitle:SetText(CWText("|cff00ff00") .. unspent .. CWText("|r of ") .. CW.stats.budget .. CWText(" unspent"))
     local changed = false
     for i = 1, 5 do
         local r = statRows[i]
@@ -6992,7 +6992,7 @@ end
 barsFrame.runeMouse:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine(CWText("Runes"))
-    GameTooltip:AddLine(string.format("%d of 6 ready.", barsFrame.runesReady or 0), 1, 1, 1)
+    GameTooltip:AddLine(string.format(CWText("%d of 6 ready."), barsFrame.runesReady or 0), 1, 1, 1)
     GameTooltip:AddLine(CWText("A dimmed rune is recharging. Spending one builds runic power."),
         0.7, 0.7, 0.7, true)
     GameTooltip:Show()
@@ -10700,11 +10700,11 @@ function CW.RebirthAuraTip(rank)
     local other = math.min(r.otherXpPerRank * rank, r.otherXpMax)
     local stat = math.min(r.statPct * rank, r.statMax)
     return {
-        "Reborn",
+        CWText("Reborn"),
         CWText("Rebirth ") .. rank .. ".",
-        "+" .. kill .. "% experience from kills and dungeons.",
-        "+" .. other .. "% experience from quests, exploration and battlegrounds.",
-        "+" .. stat .. "% to every primary stat.",
+        string.format(CWText("+%d%% experience from kills and dungeons."), kill),
+        string.format(CWText("+%d%% experience from quests, exploration and battlegrounds."), other),
+        string.format(CWText("+%d%% to every primary stat."), stat),
     }
 end
 
