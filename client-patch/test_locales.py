@@ -118,8 +118,26 @@ def test_locale_names_preserve_ranged_slot_patch():
                   "%s locale changed a technical class token" % locale)
 
 
+def test_elemental_name_puts_modifier_after_base_ability():
+    catalog = locales.load_catalog()
+    record = {
+        "id": 950000,
+        "base": 78,
+        "element": "frost",
+        "base_name": "Heroic Strike",
+        "name": "Frozen Heroic Strike",
+        "description": "",
+        "rank_text": "",
+    }
+    translated = locales._elemental_variant_translation(
+        record, catalog, {78: ("Удар героя", "")})
+    check(translated["name"] == "Удар героя: ледяная магия",
+          "elemental modifier should follow the translated base ability")
+
+
 if __name__ == "__main__":
     test_player_catalogs_load_from_package()
     test_updater_delivers_bundled_catalogs()
     test_locale_names_preserve_ranged_slot_patch()
+    test_elemental_name_puts_modifier_after_base_ability()
     print("all locale package and DBC merge checks passed")

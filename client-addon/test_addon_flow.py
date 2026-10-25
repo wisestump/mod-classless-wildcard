@@ -585,7 +585,8 @@ def test_archetypes(h):
     h.check(rows[1]["__shown"] is True and rows[2]["__shown"] is True and rows[3]["__shown"] is False,
             "two rows shown, the rest hidden")
     name1 = str(rows[1].name["__text"])
-    h.check("Blade Dancer" in name1 and "26 abilities, 71 talent ranks" in str(rows[1].counts["__text"]),
+    counts1 = str(rows[1].counts["__text"])
+    h.check("Blade Dancer" in name1 and "26" in counts1 and "71" in counts1,
             "row shows the name, and the counts on their own line: %r" % str(rows[1].counts["__text"]))
     h.check(rows[1]["__h"] == 58 and rows[2]["__h"] == 58, "rows are sized from their text (%s)" % rows[1]["__h"])
     h.check("Following" in str(rows[2].name["__text"]) and str(rows[2].apply["__text"]) == "Stop",
@@ -5208,6 +5209,34 @@ def test_locale_selection():
              str(ru.CW.wiz.cards[1].button["__text"]) == "Выбрать свободный путь" and
              "Вы сами выбираете способности и таланты." in str(ru.CW.wiz.cards[1].body["__text"]),
              "ruRU translates the first-login path wizard")
+    path_prompt = "Choose before level %d, or you start on the %s path. This character keeps the path it chooses."
+    ru.recv(state(1, level=2))
+    ru.rt.execute("ClasslessWildcard_API.state.deadline = 2; ClasslessWildcard_API.rules.defaultMode = 1")
+    expected_wildcard_prompt = str(ru_locale.text[path_prompt]) % (2, str(ru_locale.text["Wildcard"]))
+    ru.check(str(ru.CW.wiz.DeadlineText()) == expected_wildcard_prompt and
+             "Wildcard" not in str(ru.CW.wiz.DeadlineText()) and
+             str(ru_locale.text["Every spell and talent of every class is open to you. Will you choose each ability yourself, or let the Wildcard deal them?"]) in
+                 str(ru.CW.wiz.text["__text"]) and
+             all(str(ru_locale.text[key]) in str(ru.CW.wiz.cards[2].body["__text"])
+                 for key in ("The dice deal your abilities and talents.",
+                             "Start with a hand of cards and reroll the ones you do not want.",
+                             "A rare roll is a real find.")),
+             "ruRU formats the path prompt and localizes every Wildcard card line")
+    ru.rt.execute("ClasslessWildcard_API.rules.defaultMode = 0")
+    expected_classless_prompt = str(ru_locale.text[path_prompt]) % (2, str(ru_locale.text["Classless"]))
+    ru.check(str(ru.CW.wiz.DeadlineText()) == expected_classless_prompt,
+             "ruRU formats the same path prompt for the Classless default")
+    arch_list = ru.rt.table()
+    arch_row = ru.rt.table()
+    arch_row.name, arch_row.desc, arch_row.count, arch_row.ranks = "Проверка", "Описание", 26, 71
+    arch_list[1] = arch_row
+    ru.CW.FillArchRowsFor(arch_list, ru.rt.eval("function() end"), 0, "locale-count-check")
+    expected_count = str(ru_locale.text["%d abilities"]) % 26 + str(
+        ru_locale.text[", %d talent rank"]) % 71
+    ru.check(expected_count in str(ru.CW.archFly.rows[1].counts["__text"]),
+             "ruRU archetype counts use the translated few and many forms: %r / %r" %
+                 (expected_count, str(ru.CW.archFly.rows[1].counts["__text"])))
+
     help_pages = ru.CW.HelpSections()
     ru.check(str(help_pages[1]["title"]) == "Начало" and
              str(help_pages[1]["blocks"][1]["head"]) == "Вы — герой" and
@@ -5342,6 +5371,21 @@ def test_locale_selection():
     ru.check(all(str(ru.CW.challengesById[index].name) == str(ru_locale.text[name])
                  for index, name in enumerate(challenge_names, 2)),
              "every stable challenge label maps without changing its numeric id")
+    preview_rule = "Редкий противник побеждён, и краткое описание должно целиком поместиться после переноса строки."
+    ru.CW.challengesById[1].rule = preview_rule
+    ru.CW.runFly.selected = 1
+    ru.CW.runFly.rule.GetStringHeight = ru.rt.eval("function() return 68 end")
+    ru.CW.runFly.scroll.SetPoint = ru.rt.eval(
+        "function(self, point, rel, x, y) if point == 'TOPLEFT' then self.__dynamicTop = {point, rel, x} end end")
+    ru.CW.RenderRuns(True)
+    rule_top = ru.CW.runFly.headLine["__point"]
+    scroll_top = ru.CW.runFly.scroll["__dynamicTop"]
+    ru.check(str(ru.CW.runFly.rule["__text"]) == preview_rule and
+             ru.CW.runFly.rule["__h"] == 68 and
+             rule_top[3] == -114 and scroll_top[3] == -120,
+             "challenge preview keeps full text/height and moves detail below it: %r, %r, %r, %r" %
+                 (str(ru.CW.runFly.rule["__text"]), ru.CW.runFly.rule["__h"],
+                  list(rule_top.values()), list(scroll_top.values())))
     lives_one = str(ru_locale.text["%d life out of %d remains"]) % (1, 5)
     lives_few = str(ru_locale.text["%d lives (few) out of %d remain"]) % (4, 5)
     lives_many = str(ru_locale.text["%d lives out of %d remain"]) % (5, 5)

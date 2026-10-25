@@ -937,8 +937,8 @@ def main(argv):
                   spell_icon(icon_dbc, 21391) == dbc.SPELL_ICON_OVERRIDES[21391],
                   "%s -> %s" % (spell_icon(spell_dbc, 21391), spell_icon(icon_dbc, 21391)))
 
-            # The nemesis mark reads "Nemesis" in every locale column, and its
-            # debuff tooltip says what it is; nothing else's text moves.
+            # Nemesis aura text is English for the stock fallback locales and
+            # Russian in ruRU; nothing else's text moves.
             named_dbc, renamed = dbc.rename_spells(spell_dbc)
             nc, _nf, nrs, _nss = dbc.parse_header(named_dbc)
             nstrings = named_dbc[20 + nc * nrs:]
@@ -948,11 +948,19 @@ def main(argv):
                      for c in range(dbc.SPELL_LOCALES)}
             tips = {dbc.read_string(nstrings, struct.unpack_from("<I", mark_row, (dbc.SPELL_TOOLTIP_COLUMN + c) * 4)[0])
                     for c in range(dbc.SPELL_LOCALES)}
-            check("the nemesis mark is named Nemesis in every locale",
-                  renamed == len(dbc.SPELL_RENAMES) and texts == {"Nemesis"},
+            mark_ru = dbc.SPELL_RENAMES_RURU[21391]
+            check("the nemesis mark has English fallback and a Russian ruRU name",
+                  renamed == len(dbc.SPELL_RENAMES)
+                  and texts == {dbc.SPELL_RENAMES[21391][0], mark_ru[0]}
+                  and dbc.read_string(nstrings, struct.unpack_from(
+                      "<I", mark_row, (dbc.SPELL_NAME_COLUMN + dbc.SPELL_LOCALE_RURU) * 4)[0])
+                  == mark_ru[0],
                   "%d renamed, names %s" % (renamed, sorted(texts)))
-            check("and its debuff tooltip says what it is",
-                  tips == {dbc.SPELL_RENAMES[21391][1]}, "tooltips %s" % sorted(tips))
+            check("and its debuff tooltip has an English fallback and Russian ruRU text",
+                  tips == {dbc.SPELL_RENAMES[21391][1], mark_ru[1]}
+                  and dbc.read_string(nstrings, struct.unpack_from(
+                      "<I", mark_row, (dbc.SPELL_TOOLTIP_COLUMN + dbc.SPELL_LOCALE_RURU) * 4)[0])
+                  == mark_ru[1], "tooltips %s" % sorted(tips))
             moved = sum(1 for i in range(nc)
                         if struct.unpack_from("<I", named_dbc, 20 + i * nrs)[0] != 21391
                         and named_dbc[20 + i * nrs:20 + (i + 1) * nrs] != spell_dbc[20 + i * sr:20 + (i + 1) * sr])

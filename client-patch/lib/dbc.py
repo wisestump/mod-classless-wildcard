@@ -18,6 +18,8 @@ so a community patch's version is preserved rather than reverted.
 
 from __future__ import annotations
 
+import json
+import os
 import struct
 
 WDBC_MAGIC = b"WDBC"
@@ -882,6 +884,29 @@ SPELL_RENAMES = {
     33930: ("Hidden Weakness", "It has a weakness. Find it in the fight."),
 }
 
+SPELL_RENAME_RURU_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "..", "locales", "nemesis_spell_texts_ruRU.json"))
+SPELL_LOCALE_RURU = 8
+
+
+def _load_spell_rename_ruRU():
+    """Load the packaged Russian overlay for the stock Nemesis aura spells."""
+    with open(SPELL_RENAME_RURU_PATH, "r", encoding="utf-8") as source:
+        document = json.load(source)
+    entries = document.get("spells", {})
+    expected = {str(spell_id) for spell_id in SPELL_RENAMES}
+    if set(entries) != expected:
+        raise ValueError("Nemesis spell ruRU IDs differ from SPELL_RENAMES")
+    result = {}
+    for spell_id, entry in entries.items():
+        if not entry.get("name") or not entry.get("tooltip"):
+            raise ValueError("Nemesis spell ruRU name/tooltip missing at %s" % spell_id)
+        result[int(spell_id)] = (entry["name"], entry["tooltip"])
+    return result
+
+
+SPELL_RENAMES_RURU = _load_spell_rename_ruRU()
+
 # Stock spell columns the module needs set to its own values: id -> {column: value}.
 # 36779 is Swear Vendetta (ClasslessMgr::SWEAR_VENDETTA_SPELL), a stock dummy:
 # its cooldown drawn (29 RecoveryTime, ms; the server takes the realm's own from
@@ -932,6 +957,7 @@ def rename_spells(spell_data: bytes, renames=None):
     reads that way is left alone, so a second pass changes nothing.
     Returns (new_dbc_bytes, renamed)."""
     renames = SPELL_RENAMES if renames is None else renames
+    localized_renames = SPELL_RENAMES_RURU
     record_count, field_count, record_size, string_size = parse_header(spell_data)
     if field_count != SPELL_FIELDS or record_size != SPELL_FIELDS * 4:
         raise DbcError("Spell.dbc is not the 3.3.5a layout this patch understands.")
@@ -954,13 +980,26 @@ def rename_spells(spell_data: bytes, renames=None):
         name, tooltip = renames[spell_id]
         current = read_string(bytes(strings), struct.unpack_from("<I", records, base + SPELL_NAME_COLUMN * 4)[0])
         current_tip = read_string(bytes(strings), struct.unpack_from("<I", records, base + SPELL_TOOLTIP_COLUMN * 4)[0])
-        if current == name and current_tip == tooltip:
+        ru_name, ru_tooltip = localized_renames.get(spell_id, (name, tooltip))
+        current_ru = read_string(bytes(strings), struct.unpack_from(
+            "<I", records, base + (SPELL_NAME_COLUMN + SPELL_LOCALE_RURU) * 4)[0])
+        current_ru_tip = read_string(bytes(strings), struct.unpack_from(
+            "<I", records, base + (SPELL_TOOLTIP_COLUMN + SPELL_LOCALE_RURU) * 4)[0])
+        if (current == name and current_tip == tooltip
+                and current_ru == ru_name and current_ru_tip == ru_tooltip):
             continue
         name_off, tip_off = add(name), add(tooltip)
         for col in range(SPELL_LOCALES):
             struct.pack_into("<I", records, base + (SPELL_NAME_COLUMN + col) * 4, name_off)
             struct.pack_into("<I", records, base + (SPELL_DESCRIPTION_COLUMN + col) * 4, tip_off)
             struct.pack_into("<I", records, base + (SPELL_TOOLTIP_COLUMN + col) * 4, tip_off)
+        ru_name_off, ru_tip_off = add(ru_name), add(ru_tooltip)
+        struct.pack_into("<I", records,
+                         base + (SPELL_NAME_COLUMN + SPELL_LOCALE_RURU) * 4, ru_name_off)
+        struct.pack_into("<I", records,
+                         base + (SPELL_DESCRIPTION_COLUMN + SPELL_LOCALE_RURU) * 4, ru_tip_off)
+        struct.pack_into("<I", records,
+                         base + (SPELL_TOOLTIP_COLUMN + SPELL_LOCALE_RURU) * 4, ru_tip_off)
         renamed += 1
 
     header = WDBC_MAGIC + struct.pack("<4I", record_count, field_count, record_size, len(strings))

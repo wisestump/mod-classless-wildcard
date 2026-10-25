@@ -107,7 +107,10 @@ def _elemental_variant_translation(record, catalog, base_spell_text):
     ru_name, ru_rank = base_spell_text.get(int(record["base"]), ("", ""))
     if not ru_name:
         raise ValueError("ruRU client Spell.dbc has no base name for spell %s" % record["base"])
-    name = "%s: %s" % (element["prefix"], ru_name)
+    # Keep the base ability recognizable at the start of the name; the element
+    # is a modifier and follows it after the colon. It is lowercase in that
+    # position, matching the ruRU UI convention ("Heroic Strike: frost magic").
+    name = "%s: %s" % (ru_name, element["prefix"].lower())
     rank = ru_rank if record.get("rank_text") else ""
     if record.get("rank_text") and not rank:
         rank = "Ранг %d" % int(record.get("rank", 1))

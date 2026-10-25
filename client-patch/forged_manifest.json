@@ -10,7 +10,8 @@
   "id": 990,
   "name": "Hero",
   "category": 7,
-  "icon": 3411
+  "icon": 3411,
+  "ruRU": "Герой"
  },
  "skill_race_class": {
   "id": 990500,

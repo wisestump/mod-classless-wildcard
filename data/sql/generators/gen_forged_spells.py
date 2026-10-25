@@ -2950,10 +2950,18 @@ def write_sql(spells, lines, gen, path, talents=()):
 
 
 def write_manifest(spells, lines, visuals, gen, path, run_desc):
+    # The client patch appends this row to SkillLine.dbc. Keep the Russian
+    # display name in the generated manifest itself as well as in the locale
+    # catalog, so callers that apply the DBC patch directly do not depend on
+    # install.py enriching the manifest first.
+    skill_line_ru = locale_support.load_catalog().get("skill_lines", {}).get(str(HERO_LINE))
+    if not skill_line_ru:
+        raise ValueError("ruRU skill line name missing at id %d" % HERO_LINE)
     doc = dict(version=1, run=run_desc, generation=gen,
                spell_block=[SPELL_BASE, BLOCK_END],
                skill_line=dict(id=HERO_LINE, name=HERO_LINE_NAME,
-                               category=SKILL_CATEGORY_CLASS, icon=HERO_LINE_ICON),
+                               category=SKILL_CATEGORY_CLASS, icon=HERO_LINE_ICON,
+                               ruRU=skill_line_ru),
                # The same row the SQL writes to skillraceclassinfo_dbc. The
                # server needs it (Player::_LoadSkills deletes a skill that has
                # none, at every login); the client's copy had none, which was

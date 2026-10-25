@@ -135,6 +135,11 @@ def main() -> int:
     forged_path = os.path.join(MODULE, "client-patch", "forged_manifest.json")
     with open(forged_path, "r", encoding="utf-8") as source:
         forged = json.load(source)
+    skill_line_id = str(forged.get("skill_line", {}).get("id", ""))
+    skill_line_ru = catalog.get("skill_lines", {}).get(skill_line_id)
+    if (not skill_line_ru or
+            forged.get("skill_line", {}).get("ruRU") != skill_line_ru):
+        raise SystemExit("forged client skill line ruRU name differs from the catalog")
     spell_rows = forged.get("spells", [])
     locale_support.apply_ruRU(forged, locale_support.load_catalog(), "spells")
     for row in spell_rows:
@@ -244,6 +249,7 @@ def main() -> int:
           (len(expected_ids), len(expected_ids)))
     print("ruRU forged spell coverage: %d/%d rows have localized fields and preserved placeholders" %
           (translated_spell_count, len(spell_rows)))
+    print("ruRU forged skill line coverage: 1/1 name matches the locale catalog")
     print("ruRU elemental spell coverage: %d/%d rows currently have locale overlays" %
           (translated_elemental, len(elemental_rows)))
     return 0

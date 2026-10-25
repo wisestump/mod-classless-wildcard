@@ -11,6 +11,13 @@ local function CWText(text)
     return (ClasslessWildcardLocale.text or {})[text] or text
 end
 
+local function CountText(n, one, few, many)
+    local mod100, mod10 = n % 100, n % 10
+    local key = (mod100 >= 11 and mod100 <= 14) and many
+        or (mod10 == 1 and one or ((mod10 >= 2 and mod10 <= 4) and few or many))
+    return string.format(CWText(key), n)
+end
+
 local RARITY_COLORS = {
     [0] = "|cffffffff", -- common
     [1] = "|cff1eff00", -- uncommon
@@ -788,7 +795,7 @@ local function MakeEntry(x, y, width, index)
             GameTooltip:Hide()   -- the same link on a shown tooltip toggles it off
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetHyperlink("spell:" .. self.spellId)
-            if self.tipLine then GameTooltip:AddLine(self.tipLine, 0.9, 0.8, 0.4) end
+            if self.tipLine then GameTooltip:AddLine(CWText(self.tipLine), 0.9, 0.8, 0.4) end
             GameTooltip:Show()
         end
     end)
@@ -812,7 +819,7 @@ end
 
 -- Abilities pane -----------------------------------------------------------------
 local ABIL_X, ABIL_W = 24, 296
-MakePaneHeader(ABIL_X + 84, 80, "Abilities")
+MakePaneHeader(ABIL_X + 84, 80, CWText("Abilities"))
 
 local abilEntries = {}
 for i = 1, ENTRIES do
@@ -822,7 +829,7 @@ local abilPrev, abilPage, abilNext = MakePager(ABIL_X, ABIL_W, 66)
 
 -- Talents pane -------------------------------------------------------------------
 local TAL_X, TAL_W = 336, 296
-MakePaneHeader(TAL_X + 84, 80, "Talents")
+MakePaneHeader(TAL_X + 84, 80, CWText("Talents"))
 
 -- Sort and filter buttons sit at the ends of the header strips, either side
 -- of the pane titles. Clicking cycles the choice and reloads page 1. Block
@@ -2135,7 +2142,7 @@ do
         fly.rewardIntro:SetText(string.format(CWText("Paid once, when you reach level %d%s"), CW.rules.maxLevel, goal))
         Place(fly.rewardIntro, 0, y)
         y = y + H(fly.rewardIntro, 12) + 10
-        local title = (c.title or ""):gsub("%%s", player)
+            local title = CWText((c.title or ""):gsub("%%s", player))
         local rows = {
             { CWText("Gold"), Coin(c.gold) },
             { CWText("Title"), title ~= "" and ("|cffe6cc80" .. title .. "|r") or CWText("None") },
@@ -2166,7 +2173,7 @@ do
         local reward = c.reward or 0
         local plate = fly.plate
         if reward > 0 then
-            local name = (GetSpellInfo(reward)) or "Reward ability"
+            local name = (GetSpellInfo(reward)) or CWText("Reward ability")
             fly.abilityBtn.spellId = reward
             fly.abilityBtn.icon:SetTexture(SpellIcon(reward))
             Place(fly.abilityBtn, 2, y + 2)
@@ -2178,9 +2185,7 @@ do
             Place(fly.abilitySub, 58, y + 27)
             fly.abilitySub:Show()
             y = y + 56
-            fly.abilityNote:SetText(CWText("No roll or shop can give this ability. Once earned it is yours as an heirloom: ")
-                .. "you can use it from level 1, it carries through every Rebirth, and it is never rerolled or refunded. "
-                .. "Hover the icon for the full tooltip.")
+            fly.abilityNote:SetText(CWText("No roll or shop can give this ability. Once earned it is yours as an heirloom: you can use it from level 1, it carries through every Rebirth, and it is never rerolled or refunded. Hover the icon for the full tooltip."))
             Place(fly.abilityNote, 0, y)
             fly.abilityNote:Show()
             y = y + H(fly.abilityNote, 42) + 12
@@ -2227,11 +2232,11 @@ do
         y = PlaceHeader(fly.hRecord, y)
         local rec
         if c.finished == 1 then
-            rec = OK .. "|cff00ff00Finished.|r Its gold, title and ability have been paid."
+            rec = OK .. CWText("|cff00ff00Finished.|r Its gold, title and ability have been paid.")
         elseif (c.best or 0) > 0 then
-            rec = "Not finished yet. Your best on it: level " .. c.best .. "."
+            rec = string.format(CWText("Not finished yet. Your best on it: level %d."), c.best)
         else
-            rec = "You have not tried this one yet."
+            rec = CWText("You have not tried this one yet.")
         end
         fly.record:SetText(rec)
         Place(fly.record, 0, y)
@@ -2281,6 +2286,18 @@ do
         if c then
             fly.dName:SetText(c.name)
             fly.rule:SetText(c.rule)
+            -- A Russian preview can wrap to more than two lines. Keep the
+            -- entire sentence visible, then move the divider and scroll area
+            -- below it instead of clipping the last word with an ellipsis.
+            local ruleHeight = fly.rule:GetStringHeight()
+            if ruleHeight < 34 then ruleHeight = 34 end
+            fly.rule:SetHeight(ruleHeight)
+            fly.headLine:ClearAllPoints()
+            fly.headLine:SetPoint("TOPLEFT", RX, -(46 + ruleHeight))
+            fly.headLine:SetPoint("TOPRIGHT", -16, -(46 + ruleHeight))
+            fly.scroll:ClearAllPoints()
+            fly.scroll:SetPoint("TOPLEFT", RX, -(52 + ruleHeight))
+            fly.scroll:SetPoint("BOTTOMRIGHT", -36, 46)
             FillDetail(c, s)
             fly.scroll:Show()
             if CW.Unlimited(c.lives) then
@@ -2588,11 +2605,8 @@ archFly.subtitle:SetPoint("TOPLEFT", archFly.title, "BOTTOMLEFT", 0, -4)
 archFly.subtitle:SetText(CWText("A build that is bought for you as you level."))
 
 function archFly.IntroText()
-    return "|cffffd100Follow:|r its abilities and talents are bought for you, in order, as each becomes available, "
-        .. "from level 1 to " .. (CW.rules.maxLevel or 80) .. ".\n"
-        .. "|cffffd100Switch:|r your current abilities are unlearned and refunded, and your talents are reset.\n"
-        .. "|cffffd100Stop:|r at any time. What you own stays.\n"
-        .. "|cffffd100Build:|r see every step and the level it is bought at before you choose."
+    return string.format(CWText("|cffffd100Follow:|r its abilities and talents are bought for you, in order, as each becomes available, from level 1 to %d.\n|cffffd100Switch:|r your current abilities are unlearned and refunded, and your talents are reset.\n|cffffd100Stop:|r at any time. What you own stays.\n|cffffd100Build:|r see every step and the level it is bought at before you choose."),
+        CW.rules.maxLevel or 80)
 end
 archFly.INTRO = archFly.IntroText()
 archFly.intro = archFly:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -2635,7 +2649,7 @@ local function MakeArchRow(parent, width, buttonText)
     r.apply = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
     r.apply:SetWidth(72); r.apply:SetHeight(22)
     r.apply:SetPoint("RIGHT", -8, 0)
-    r.apply:SetText(buttonText)
+    r.apply:SetText(CWText(buttonText))
     r.apply.defaultText = buttonText
     r.view = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
     r.view:SetWidth(72); r.view:SetHeight(22)
@@ -2701,12 +2715,14 @@ local function FillArchRows(L, list, onChoose, x, top, key)
         end
         local arch = list[i]
         if arch then
-            local count = (arch.count == 1) and "1 ability" or (arch.count .. " abilities")
-            if (arch.ranks or 0) > 0 then count = count .. ", " .. arch.ranks .. " talent ranks" end
+            local count = CountText(arch.count or 0, "%d ability", "%d abilities few", "%d abilities")
+            if (arch.ranks or 0) > 0 then
+                count = count .. CountText(arch.ranks, ", %d talent rank", ", %d talent ranks few", ", %d talent ranks")
+            end
             r.name:SetText(CWText("|cffffd100") .. arch.name .. "|r" .. (arch.following and "  |cff00ff00Following|r" or ""))
             r.desc:SetText(arch.desc)
             r.counts:SetText(CWText("|cff999999") .. count .. "|r")
-            r.apply:SetText(arch.following and "Stop" or r.apply.defaultText)
+            r.apply:SetText(CWText(arch.following and "Stop" or r.apply.defaultText))
             r.apply:SetScript("OnClick", function() onChoose(arch) end)
             r.view:SetScript("OnClick", function() if CW.OpenArchPlan then CW.OpenArchPlan(arch) end end)
             -- the row being followed is picked out in gold, the rest alternate
@@ -3109,8 +3125,7 @@ do
     P.note:SetWidth(W - 2 * PAD)
     P.note:SetJustifyH("LEFT")
     P.note:SetTextColor(0.75, 0.75, 0.75)
-    P.note:SetText(CWText("Bought in this order as you level. The level is when each is bought, ")
-        .. "from the Ability and Talent Essence you earn. Hover any row for its tooltip.")
+    P.note:SetText(CWText("Bought in this order as you level. The level is when each is bought, from the Ability and Talent Essence you earn. Hover any row for its tooltip."))
 
     P.scroll = CreateFrame("ScrollFrame", "ClasslessWildcardArchPlanScroll", P, "UIPanelScrollFrameTemplate")
     P.scroll:SetPoint("TOPLEFT", PAD, -94)
@@ -3132,7 +3147,7 @@ do
     P.done = CreateFrame("Button", nil, P, "UIPanelButtonTemplate")
     P.done:SetWidth(100); P.done:SetHeight(22)
     P.done:SetPoint("BOTTOMRIGHT", -PAD, 14)
-    P.done:SetText(CLOSE or "Close")
+    P.done:SetText(CWText("Close"))
     P.done:SetScript("OnClick", function() P:Hide() end)
     -- a starter build as the start of one of your own
     P.copy = CreateFrame("Button", nil, P, "UIPanelButtonTemplate")
@@ -3260,9 +3275,9 @@ do
         end
         local ranks = 0
         for _, s in ipairs(d.talents) do ranks = ranks + s.rank end
-        Section("Abilities  |cffaaaaaa" .. #d.abilities .. "|r", d.abilities, false)
+        Section(string.format(CWText("Abilities  |cffaaaaaa%d|r"), #d.abilities), d.abilities, false)
         if #d.talents > 0 then
-            Section("Talents  |cffaaaaaa" .. ranks .. " ranks|r", d.talents, true)
+        Section(CWText("Talents  |cffaaaaaa") .. CountText(ranks, "%d rank|r", "%d ranks few|r", "%d ranks|r"), d.talents, true)
         end
         P.child:SetHeight(math.max(y, 1))
         P.scroll:SetVerticalScroll(0)
@@ -3275,7 +3290,7 @@ do
         P.arch = arch
         P.data = { id = arch.build and 0 or arch.id, abilities = {}, talents = {} }
         P.title:SetText(arch.name)
-        P.follow:SetText(arch.following and "Stop" or "Follow")
+        P.follow:SetText(CWText(arch.following and "Stop" or "Follow"))
         P.follow:SetScript("OnClick", function()
             P:Hide()
             if CW.archFly then CW.archFly:Hide() end
@@ -3426,12 +3441,12 @@ do
         local b = CreateFrame("Button", nil, fly.bar, "UIPanelButtonTemplate")
         b:SetWidth(w); b:SetHeight(22)
         b:SetPoint("LEFT", x, 0)
-        b:SetText(text)
+        b:SetText(CWText(text))
         b:SetScript("OnClick", onClick)
         b:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(text)
-            GameTooltip:AddLine(tip, 1, 1, 1, true)
+            GameTooltip:AddLine(CWText(text))
+            GameTooltip:AddLine(CWText(tip), 1, 1, 1, true)
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3442,7 +3457,7 @@ do
         Send("ARCHMINE")
     end, "Your current abilities and talents as a new build, abilities in the order they unlock.")
     fly.bar.new = BarButton("New", 80, 136, function()
-        CW.OpenBuildEditor({ name = "New build", desc = "", abilities = {}, talents = {} }, nil)
+        CW.OpenBuildEditor({ name = CWText("New build"), desc = "", abilities = {}, talents = {} }, nil)
     end, "An empty build, opened in the My Build column. Click abilities and talents to add them.")
     fly.bar.import = BarButton("Import", 80, 222, function()
         CW.OpenShareWindow("import")
@@ -3454,10 +3469,10 @@ do
 
     function CW.ArchTabsRefresh()
         local mine = CW.archTab == "MINE"
-        fly.tabMine:SetText(mine and "Starter Builds" or "My Builds")
-        fly.title:SetText(mine and "My Builds" or "Archetypes")
-        fly.subtitle:SetText(mine and "Your own archetypes, saved on this computer."
-            or "A build that is bought for you as you level.")
+        fly.tabMine:SetText(CWText(mine and "Starter Builds" or "My Builds"))
+        fly.title:SetText(CWText(mine and "My Builds" or "Archetypes"))
+        fly.subtitle:SetText(CWText(mine and "Your own archetypes, saved on this computer."
+            or "A build that is bought for you as you level."))
     end
 
     local MINE_INTRO = "|cffffd100Follow:|r a build of your own, bought for you as you level like a starter build.\n"
@@ -3511,7 +3526,7 @@ do
                 local b = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
                 b:SetWidth(64); b:SetHeight(18)
                 b:SetPoint("BOTTOMLEFT", x, 6)
-                b:SetText(text)
+                b:SetText(CWText(text))
                 return b
             end
             r.edit, r.share, r.del = Small("Edit", 8), Small("Share", 76), Small("Delete", 144)
@@ -3594,7 +3609,7 @@ do
         b:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
         b.hint = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         b.hint:SetPoint("LEFT", 2, 0)
-        b.hint:SetText(placeholder)
+        b.hint:SetText(CWText(placeholder))
         b:SetScript("OnEditFocusGained", function(self) self.hint:Hide() end)
         b:SetScript("OnEditFocusLost", function(self)
             if (self:GetText() or "") == "" then self.hint:Show() end
@@ -3623,10 +3638,7 @@ do
     E.empty:SetWidth(CHILD_W - 12)
     E.empty:SetJustifyH("LEFT")
     E.empty:SetTextColor(0.75, 0.75, 0.75)
-    E.empty:SetText(CWText("Click an ability or talent in the lists on the left to add it here. ")
-        .. "Right-click takes it back out, or one talent rank.\n\n"
-        .. "Each row shows the level it is bought at. Click the level to type another, turn the "
-        .. "mouse wheel over it, or use the arrows. Only that row changes.")
+    E.empty:SetText(CWText("Click an ability or talent in the lists on the left to add it here. Right-click takes it back out, or one talent rank.\n\nEach row shows the level it is bought at. Click the level to type another, turn the mouse wheel over it, or use the arrows. Only that row changes."))
 
     E.budget = E:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     E.budget:SetPoint("BOTTOMLEFT", 2, 80)
@@ -3644,7 +3656,7 @@ do
         local b = CreateFrame("Button", nil, E, "UIPanelButtonTemplate")
         b:SetWidth(BTN_W); b:SetHeight(22)
         b:SetPoint("BOTTOMLEFT", x, 2)
-        b:SetText(text)
+        b:SetText(CWText(text))
         return b
     end
     E.save = Button("Save", 0)
@@ -4155,7 +4167,7 @@ do
             end
             -- what the server found wrong with this row, under the spell
             if self.warning then GameTooltip:AddLine(self.warning, 1, 0.33, 0.27, true) end
-            GameTooltip:AddLine(self.isTalent and "Right-click: one rank fewer." or "Right-click: take it out.",
+            GameTooltip:AddLine(CWText(self.isTalent and "Right-click: one rank fewer." or "Right-click: take it out."),
                 0.9, 0.8, 0.4)
             GameTooltip:Show()
         end)
@@ -4219,10 +4231,9 @@ do
                     1, 1, 1, true)
             end
             if held then GameTooltip:AddLine(CWText("Held back to this level."), 1, 0.82, 0) end
-            GameTooltip:AddLine((kind == "A" and "Unlocks" or "Its tier opens") .. " at level " .. floor(id) .. ".",
+            GameTooltip:AddLine(string.format(CWText(kind == "A" and "Unlocks at level %d." or "Its tier opens at level %d."), floor(id)),
                 0.75, 0.75, 0.75)
-            GameTooltip:AddLine(CWText("Click to type a level. Mouse wheel: one level sooner or later. ")
-                .. "It cannot come before the build has the essence for it. No other row moves.", 0.9, 0.8, 0.4, true)
+            GameTooltip:AddLine(CWText("Click to type a level. Mouse wheel: one level sooner or later. It cannot come before the build has the essence for it. No other row moves."), 0.9, 0.8, 0.4, true)
             GameTooltip:Show()
         end)
         r.levelBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -4243,15 +4254,15 @@ do
     local function Warning(w)
         if not w then return nil end
         local cap = CW.rules.maxLevel or 80
-        if w.code == "gone" then return "This realm does not have it, or it cannot be bought." end
-        if w.code == "twice" then return "It is already in the build." end
-        if w.code == "rank" then return "It does not have that many ranks." end
-        if w.code == "never" then return "In this order it is never bought by level " .. cap .. "." end
+        if w.code == "gone" then return CWText("This realm does not have it, or it cannot be bought.") end
+        if w.code == "twice" then return CWText("It is already in the build.") end
+        if w.code == "rank" then return CWText("It does not have that many ranks.") end
+        if w.code == "never" then return string.format(CWText("In this order it is never bought by level %d."), cap) end
         if w.code == "needs" then
-            if (w.extra or 0) == 0 then return "It needs an ability that is not in the build." end
+            if (w.extra or 0) == 0 then return CWText("It needs an ability that is not in the build.") end
             local info = CW.talentInfo[w.extra]
             local name = info and info.spell and (GetSpellInfo(info.spell))
-            return "It needs " .. (name or "another talent") .. " earlier in the build."
+            return string.format(CWText("It needs %s earlier in the build."), name or CWText("another talent"))
         end
         return nil
     end
@@ -4277,14 +4288,13 @@ do
         end
         local shortA, shortT = CW.BuildShortAt("A"), CW.BuildShortAt("T")
         local function LevelText(held, key, lv, short)
-            if short and lv == short then return "|cffff5544Lv " .. lv .. "|r" end
-            if held or E.wheeling == key then return "|cffffd100Lv " .. lv .. "|r" end
-            return "Lv " .. lv
+            if short and lv == short then return "|cffff5544" .. CWText("Lv ") .. lv .. "|r" end
+            if held or E.wheeling == key then return "|cffffd100" .. CWText("Lv ") .. lv .. "|r" end
+            return CWText("Lv ") .. lv
         end
         local function ShortWarning(lv, short, what)
             if not short or lv ~= short then return nil end
-            return "By level " .. lv .. " a Hero has not earned the " .. what .. " for everything set at or "
-                .. "before it. Set this or an earlier entry later."
+            return string.format(CWText("By level %d a Hero has not earned the %s for everything set at or before it. Set this or an earlier entry later."), lv, CWText(what))
         end
         local function Arrows(r, kind, i)
             if CanMove(kind, i, -1) then r.up:Enable() else r.up:Disable() end
@@ -4306,7 +4316,7 @@ do
         local empty = #b.abilities + #b.talents == 0
         if empty then E.empty:Show() else E.empty:Hide() end
 
-        Section("Abilities  |cffaaaaaa" .. #b.abilities .. "|r")
+        Section(string.format(CWText("Abilities  |cffaaaaaa%d|r"), #b.abilities))
         for i, id in ipairs(b.abilities) do
             nr = nr + 1
             local r = Row(nr)
@@ -4330,7 +4340,7 @@ do
         if empty then y = y + 96 end
         y = y + 8
         local ranks = #b.talents
-        Section("Talents  |cffaaaaaa" .. ranks .. (ranks == 1 and " rank" or " ranks") .. "|r")
+        Section(CWText("Talents  |cffaaaaaa") .. CountText(ranks, "%d rank|r", "%d ranks few|r", "%d ranks|r"))
         for i, t in ipairs(b.talents) do
             nr = nr + 1
             local r = Row(nr)
@@ -4398,7 +4408,7 @@ do
         if pv.done then
             local function Part(label, spent, total)
                 local c = spent > total and "|cffff5544" or "|cff00ff00"
-                return label .. " " .. c .. spent .. "|r / " .. total
+                return CWText(label) .. " " .. c .. spent .. "|r / " .. total
             end
             E.budget:SetText(Part("Ability Essence", pv.spentA, pv.totalA) .. "    "
                 .. Part("Talent", pv.spentT, pv.totalT))
@@ -4407,9 +4417,9 @@ do
             elseif pv.problem ~= "" then
                 E.verdict:SetText(CWText("|cffff5544") .. pv.problem .. "|r")
             elseif E.dirty then
-                E.verdict:SetText(CWText("|cff00ff00Fits by level ") .. cap .. ". Not saved yet.|r")
+                E.verdict:SetText(string.format(CWText("|cff00ff00Fits by level %d. Not saved yet.|r"), cap))
             else
-                E.verdict:SetText(CWText("|cff00ff00Fits by level ") .. cap .. ". Saved.|r")
+                E.verdict:SetText(string.format(CWText("|cff00ff00Fits by level %d. Saved.|r"), cap))
             end
         else
             E.budget:SetText(CWText("|cffaaaaaaChecking the build...|r"))
@@ -4648,7 +4658,7 @@ do
             local inBuild = IndexOf(b.abilities, id) ~= nil
             Shown(w.draftTint, inBuild)
             if inBuild then w.check:Show() else w.check:Hide() end
-            w.tipLine = inBuild and "In the build. Right-click to take it out." or "Click to add it to the build."
+            w.tipLine = inBuild and "In the build. Right-click to take it out." or "Click to add to the build."
             w:SetScript("OnClick", function(_, button)
                 if button == "RightButton" then RemoveAbility(id) else AddAbility(id) end
             end)
@@ -5377,8 +5387,8 @@ end
 
 local function LevelTag(lvl, playerLevel)
     if not lvl or lvl <= 1 then return "" end
-    return (lvl > (playerLevel or 1)) and ("  |cffff4444Lv " .. lvl .. "|r")
-                                       or ("  |cffaaaaaaLv " .. lvl .. "|r")
+    return (lvl > (playerLevel or 1)) and ("  |cffff4444" .. CWText("Lv ") .. lvl .. "|r")
+                                       or ("  |cffaaaaaa" .. CWText("Lv ") .. lvl .. "|r")
 end
 
 -- The button carries the count, so the panel does not have to be open to see
@@ -5403,10 +5413,12 @@ CW.UpdateStatsButton = UpdateStatsButton
 local function UpdateStatus()
     UpdateStatsButton()
     local s = CW.state
-    local modeText = s.mode == 0 and "|cff00ccffClassless|r" or (s.mode == 1 and "|cffff8800Wildcard|r" or "|cffff0000Path not chosen|r")
+    local modeText = s.mode == 0 and ("|cff00ccff" .. CWText("Classless") .. "|r")
+        or (s.mode == 1 and ("|cffff8800" .. CWText("Wildcard") .. "|r")
+        or ("|cffff0000" .. CWText("Path not chosen") .. "|r"))
     -- The Rebirth rank rides next to the path, and the crest glows for it.
     if (s.rebirths or 0) > 0 then
-        modeText = modeText .. "   |cffff8800Rebirth " .. s.rebirths .. "|r"
+        modeText = modeText .. "   |cffff8800" .. CWText("Rebirth ") .. s.rebirths .. "|r"
     end
     titleGlow:SetAlpha(CW.GlowBase())
     -- The challenge run rides in the top-right with its lives, and the
@@ -5416,7 +5428,7 @@ local function UpdateStatus()
     CW.rebirthBtn:SetText(CWText(s.rebirthReady == 1 and "Rebirth" or "Challenge"))
     local rebirthOffered = (s.rebirth == 1 and s.rebirthReady == 1) or s.runReady == 1
     if s.mode == 0 then
-        statusText:SetText(modeText .. "   Ability Essence: |cff00ff00" .. s.ae .. "|r   Talent Essence: |cff00ff00" .. s.te .. "|r")
+        statusText:SetText(modeText .. "   " .. CWText("Ability Essence: ") .. "|cff00ff00" .. s.ae .. "|r   " .. CWText("Talent Essence: ") .. "|cff00ff00" .. s.te .. "|r")
         subStatusText:SetText(CWText("Level ") .. s.level)
         bottomText:SetText(CWText(""))
         respecBtn:Show()
@@ -5424,8 +5436,8 @@ local function UpdateStatus()
         CW.buyScrollBtn:Hide()
         CW.archBtn:Show()
     elseif s.mode == 1 then
-        statusText:SetText(modeText .. "   Reroll charges: |cff00ff00" .. s.rerolls .. "|r   Reroll Scrolls: |cff00ff00" .. s.scrolls .. "|r")
-        subStatusText:SetText(CWText("Level ") .. s.level .. "   Synergy chance: " .. s.chance .. "%")
+        statusText:SetText(modeText .. "   " .. CWText("Reroll charges: ") .. "|cff00ff00" .. s.rerolls .. "|r   " .. CWText("Reroll Scrolls: ") .. "|cff00ff00" .. s.scrolls .. "|r")
+        subStatusText:SetText(CWText("Level ") .. s.level .. "   " .. CWText("Synergy chance: ") .. s.chance .. "%")
         bottomText:SetText(CWText(""))
         respecBtn:Hide()
         if rebirthOffered then CW.rebirthBtn:Show() else CW.rebirthBtn:Hide() end
@@ -5436,8 +5448,8 @@ local function UpdateStatus()
         else CW.buyScrollBtn:Hide() end
     else
         statusText:SetText(modeText)
-        subStatusText:SetText(CWText("Choose your path before level ") .. s.deadline .. ", or you start on the "
-            .. (CW.rules.defaultMode == 1 and "Wildcard" or "Classless") .. " path.")
+        local defaultPath = CWText(CW.rules.defaultMode == 1 and "Wildcard" or "Classless")
+        subStatusText:SetText(string.format(CWText("Choose your path before level %d; otherwise your starting path is %s."), s.deadline, defaultPath))
         respecBtn:Hide()
         CW.rebirthBtn:SetText(CWText("Choose path"))
         CW.rebirthBtn:Show()
@@ -5454,9 +5466,15 @@ function CW.ShowEmptyNote(note, firstRow, scope, what)
         note:Hide()
         return
     end
-    note:SetText(scope == 1
-        and ("|cffaaaaaaNo " .. what .. " at your level yet.\nSwitch to Any level to see the rest.|r")
-        or ("|cffaaaaaaNo " .. what .. " match this filter.|r"))
+    local key
+    if what == "abilities" then
+        key = scope == 1 and "No abilities at your level yet.\nSwitch to Any level to see the rest."
+            or "No abilities match this filter."
+    else
+        key = scope == 1 and "No talents at your level yet.\nSwitch to Any level to see the rest."
+            or "No talents match this filter."
+    end
+    note:SetText("|cffaaaaaa" .. CWText(key) .. "|r")
     note:Show()
 end
 
@@ -5481,13 +5499,13 @@ local function RenderAbilPane()
                 w.tipLine = "Dealt by Wildcard rolls"
                 w:SetScript("OnClick", nil)
             else
-                w.sub:SetText(typeTag .. e.cost .. " Ability Essence" .. lvlText)
+                w.sub:SetText(typeTag .. string.format(CWText("%d Ability Essence"), e.cost) .. lvlText)
                 if e.owned == 1 then
                     w.tipLine = "Known"
                 elseif s.mode ~= 0 then
                     w.tipLine = "Choose the Classless path to buy abilities."
                 elseif (e.lvl or 1) > (s.level or 1) then
-                    w.tipLine = "Requires level " .. e.lvl
+                    w.tipLine = string.format(CWText("Requires level %d"), e.lvl)
                 else
                     w.tipLine = "Click to learn"
                 end
@@ -5546,7 +5564,8 @@ local function RenderTalPane()
             end
         end
         local className = CLASS_NAMES[tabInfo.class] or "?"
-        local treeName = CW.TREE_NAMES[tabInfo.id]
+        local treeName = (ClasslessWildcardLocale.trees and ClasslessWildcardLocale.trees[tabInfo.id])
+            or CW.TREE_NAMES[tabInfo.id]
         -- "Hero: Hero" would be silly, and the Hero page has one tree anyway
         if treeName == className then treeName = nil end
         if treeName then
@@ -5570,7 +5589,7 @@ local function RenderTalPane()
             if t.owned > 0 then w.check:Show() else w.check:Hide() end
             local tlvl = 10 + (t.row or 0) * 5
             local typeTag = CW.talSort == 5
-                and ("|cffaaaaaa" .. (t.active == 1 and "Active" or "Passive") .. "|r  ") or ""
+                and ("|cffaaaaaa" .. CWText(t.active == 1 and "Active" or "Passive") .. "|r  ") or ""
             if s.mode == 1 then
                 w.sub:SetText(typeTag .. (RARITY_NAMES[t.rarity] or "") .. LevelTag(tlvl, s.level))
                 w.tipLine = "Dealt by Wildcard rolls"
@@ -5579,15 +5598,15 @@ local function RenderTalPane()
                 -- price comes from the server (CFG): per rank by default,
                 -- or one charge for all ranks when TalentFlatCost is on
                 local cost = CW.talentCost or 1
-                local costText = cost .. " Talent Essence"
-                    .. (CW.talentFlat and " (all ranks)" or "/rank")
-                w.sub:SetText(typeTag .. "Tier " .. (t.row + 1) .. "  " .. costText .. LevelTag(tlvl, s.level))
+                local costText = string.format(CWText("%d Talent Essence"), cost)
+                    .. (CW.talentFlat and CWText(" (all ranks)") or CWText("/rank"))
+                w.sub:SetText(typeTag .. string.format(CWText("Tier %d"), t.row + 1) .. "  " .. costText .. LevelTag(tlvl, s.level))
                 if t.owned >= t.max then
                     w.tipLine = "Maxed"
                 elseif s.mode ~= 0 then
                     w.tipLine = "Choose the Classless path to buy talents."
                 elseif (tlvl or 1) > (s.level or 1) then
-                    w.tipLine = "Requires level " .. tlvl
+                    w.tipLine = string.format(CWText("Requires level %d"), tlvl)
                 else
                     w.tipLine = "Click to learn a rank"
                 end
@@ -5667,8 +5686,9 @@ local function RenderBuild()
     end
     buildPrev:Show(); buildNext:Show(); buildPage:Show()
     local list = BuildList()
-    buildHeader:SetText(CWText("|cffffd100My Build|r  |cffaaaaaa(") .. #CW.owned .. (#CW.owned == 1 and " ability, " or " abilities, ")
-        .. #CW.ownedT .. (#CW.ownedT == 1 and " talent)|r" or " talents)|r"))
+    buildHeader:SetText(CWText("|cffffd100My Build|r  |cffaaaaaa(")
+        .. CountText(#CW.owned, "%d ability", "%d abilities few", "%d abilities") .. ", "
+        .. CountText(#CW.ownedT, "%d talent", "%d talents few", "%d talents") .. ")|r")
     local total = math.max(1, math.ceil(#list / BUILD_ROWS))
     if CW.buildPageNo >= total then CW.buildPageNo = total - 1 end
     buildPage:SetText((CW.buildPageNo + 1) .. " / " .. total)
@@ -5689,7 +5709,7 @@ local function RenderBuild()
             local freebie = it.kind == "A" and (it.source == 2 or it.source == 3 or it.source == 4)
             r.note = nil
             if freebie then
-                suffix = suffix .. (it.source == 4 and "  |cffff8800heirloom|r"
+                suffix = suffix .. (it.source == 4 and ("  |cffff8800" .. CWText("heirloom") .. "|r")
                                     or it.source == 3 and "  |cffaaaaaafree|r"
                                     or "  |cffaaaaaatalent|r")
                 r.note = it.source == 4 and "Heirloom: carried through Rebirth, usable from level 1, never rerolled."
@@ -5717,10 +5737,10 @@ local function RenderBuild()
                     end)
                     r.lockBtn:SetScript("OnEnter", function(self)
                         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetText(want == 1 and "Lock this ability" or "Unlock this ability")
+                        GameTooltip:SetText(CWText(want == 1 and "Lock this ability" or "Unlock this ability"))
                         GameTooltip:AddLine(want == 1
-                            and "A locked ability is never taken by a reroll."
-                            or "An unlocked ability can be rerolled away.", 1, 1, 1, true)
+                            and CWText("A locked ability is never taken by a reroll.")
+                            or CWText("An unlocked ability can be rerolled away."), 1, 1, 1, true)
                         GameTooltip:Show()
                     end)
                     r.lockBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -5750,14 +5770,12 @@ local function RenderBuild()
                     end)
                     r.actBtn:SetScript("OnEnter", function(self)
                         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetText(CWText("Reroll this ") .. (kind == "T" and "talent" or "ability"))
+                        GameTooltip:SetText(CWText(kind == "T" and "Reroll this talent" or "Reroll this ability"))
                         local left = (CW.state.rerolls or 0) + (CW.state.scrolls or 0)
-                        GameTooltip:AddLine(CWText("You have |cff00ff00") .. left .. "|r reroll" .. (left == 1 and "" or "s")
-                            .. " (charges + scrolls).", 1, 1, 1)
+                        GameTooltip:AddLine(string.format(CWText("You have %d rerolls (charges + scrolls)."), left), 1, 1, 1)
                         -- a talent with a rank still to win can be kept instead
                         if kind == "T" and CW.CanStakeScrolls() and (trank or 0) < (tmax or 0) then
-                            GameTooltip:AddLine(CWText("Trades it away for a new talent. Stake Reroll Scrolls ")
-                                .. "instead to keep this one and raise its rank.", 0.4, 1, 0.4, true)
+                            GameTooltip:AddLine(CWText("Trades it away for a new talent. Stake Reroll Scrolls instead to keep this one and raise its rank."), 0.4, 1, 0.4, true)
                         end
                         GameTooltip:Show()
                     end)
@@ -5778,11 +5796,12 @@ local function RenderBuild()
                 end)
                 r.actBtn:SetScript("OnEnter", function(self)
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText(isTal and "Unlearn this talent" or "Unlearn this ability")
+                    GameTooltip:SetText(CWText(isTal and "Unlearn this talent" or "Unlearn this ability"))
                     if isTal then
-                        GameTooltip:AddLine(CWText("Refunds the Talent Essence you paid")
-                            .. ((not CW.talentFlat and ranks > 1) and (" for all " .. ranks .. " ranks.") or ".")
-                            .. " Any ability it handed over goes with it.", 1, 1, 1, true)
+                        local refund = (not CW.talentFlat and ranks > 1)
+                            and string.format(CWText("Refunds the Talent Essence you paid for all %d ranks. Any ability it handed over goes with it."), ranks)
+                            or CWText("Refunds the Talent Essence you paid. Any ability it handed over goes with it.")
+                        GameTooltip:AddLine(refund, 1, 1, 1, true)
                     else
                         GameTooltip:AddLine(CWText("Refunds the Ability Essence you paid."), 1, 1, 1)
                     end
@@ -7378,15 +7397,15 @@ do
     fly.body:SetJustifyH("LEFT")
 
     fly.stake = fly:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    fly.stake:SetPoint("TOP", 0, -96)
+    fly.stake:SetPoint("TOP", fly.body, "BOTTOM", 0, -10)
 
     fly.minus = CreateFrame("Button", nil, fly, "UIPanelButtonTemplate")
     fly.minus:SetWidth(26); fly.minus:SetHeight(22)
-    fly.minus:SetPoint("TOP", -110, -92)
+    fly.minus:SetPoint("TOP", fly.stake, "BOTTOM", -110, -8)
     fly.minus:SetText(CWText("-"))
     fly.plus = CreateFrame("Button", nil, fly, "UIPanelButtonTemplate")
     fly.plus:SetWidth(26); fly.plus:SetHeight(22)
-    fly.plus:SetPoint("TOP", 110, -92)
+    fly.plus:SetPoint("TOP", fly.stake, "BOTTOM", 110, -8)
     fly.plus:SetText(CWText("+"))
 
     fly.go = CreateFrame("Button", nil, fly, "UIPanelButtonTemplate")
@@ -7405,26 +7424,28 @@ do
         if n > max then n = max; fly.scrolls = n end
         local odds = CW.TalentUpgradeOdds(n)
 
-        fly.title:SetText(CWText("Reroll ") .. (fly.talentName or "this talent"))
-        fly.body:SetText(CWText("A reroll trades this talent away and the Wildcard deals you a new one ")
-            .. "in its place. Stake Reroll Scrolls on it instead and they buy a chance to |cffffd100keep|r "
-            .. "it and raise its rank. If the stake fails, it is traded away as normal.\n\n"
-            .. CWText("You have |cff00ff00") .. (s.scrolls or 0) .. "|r Reroll Scroll"
-            .. (((s.scrolls or 0) == 1) and "" or "s")
-            .. ". Up to |cffffd100" .. (s.tuMaxScrolls or 0) .. "|r can be staked on one reroll."
-            .. (s.scrollBuy == 1 and " Buy more with Buy Scroll on the Hero Advancement panel." or ""))
+        fly.title:SetText(CWText("Reroll") .. " " .. (fly.talentName or CWText("this talent")))
+        local bodyText = CWText("A reroll replaces this talent with a randomly chosen one. You can stake Reroll Scrolls to keep this talent and raise its rank. If the stake fails, it is replaced as usual.")
+            .. "\n\n" .. string.format(CWText("You have %d Reroll Scrolls. Up to %d can be staked on one reroll.%s"),
+                s.scrolls or 0, s.tuMaxScrolls or 0,
+                s.scrollBuy == 1 and CWText(" Buy more with Buy Scroll on the Hero Advancement panel.") or "")
+        fly.body:SetText(bodyText)
         if max > 0 then
-            fly.stake:SetText(CWText("Stake |cffffd100") .. n .. "|r  =  |cff00ff00" .. odds .. "%|r to raise its rank")
+            fly.stake:SetText(string.format(CWText("Stake %d scrolls: %d%% chance to raise its rank"), n, odds))
         else
             -- nothing to stake, so say what one WOULD buy: that is the whole
             -- reason to go and get some
-            fly.stake:SetText(CWText("|cffaaaaaaOne scroll would buy |r|cff00ff00")
-                .. CW.TalentUpgradeOdds(1) .. "%|cffaaaaaa to raise its rank|r")
+            fly.stake:SetText(string.format(CWText("One scroll gives a %d%% chance to raise its rank"), CW.TalentUpgradeOdds(1)))
         end
         fly.minus:Show(); fly.plus:Show()
         if n > 0 then fly.minus:Enable() else fly.minus:Disable() end
         if n < max then fly.plus:Enable() else fly.plus:Disable() end
-        fly.go:SetText(n > 0 and ("Reroll + " .. n) or "Reroll")
+        fly.go:SetText(n > 0 and string.format(CWText("Reroll + %d"), n) or CWText("Reroll"))
+        -- The body height changes with translated text and scroll counts. Put
+        -- the stake and controls after it, then size the dialog around them.
+        local bodyH = math.max(20, tonumber(fly.body:GetStringHeight()) or 20)
+        local stakeH = math.max(18, tonumber(fly.stake:GetStringHeight()) or 18)
+        fly:SetHeight(12 + 16 + 8 + bodyH + 10 + stakeH + 8 + 22 + 12 + 22 + 12)
     end
 
     fly.plus:SetScript("OnClick", function()
@@ -7543,11 +7564,11 @@ do
         g:SetBackdropBorderColor(0.45, 0.45, 0.5)
         g.title = g:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         g.title:SetPoint("TOPLEFT", 16, -14)
-        g.title:SetText(title)
+        g.title:SetText(CWText(title))
         g.note = g:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         g.note:SetPoint("TOPLEFT", 16, -32)
         g.note:SetTextColor(0.6, 0.6, 0.6)
-        g.note:SetText(note)
+        g.note:SetText(CWText(note))
         return g
     end
     -- a checkbox inside a group at (x, y) from the group's top-left
@@ -7556,12 +7577,12 @@ do
         cb:SetWidth(24); cb:SetHeight(24)
         cb:SetPoint("TOPLEFT", x, -y)
         local text = _G[name .. "Text"]
-        if text then text:SetText(label) end
+        if text then text:SetText(CWText(label)) end
         cb:SetScript("OnClick", onClick)
         cb:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(label)
-            GameTooltip:AddLine(tip, 1, 1, 1, true)
+            GameTooltip:AddLine(CWText(label))
+            GameTooltip:AddLine(CWText(tip), 1, 1, 1, true)
             GameTooltip:Show()
         end)
         cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -7571,12 +7592,12 @@ do
         local b = CreateFrame("Button", nil, g, "UIPanelButtonTemplate")
         b:SetWidth(180); b:SetHeight(22)
         b:SetPoint("TOPLEFT", x, -y)
-        b:SetText(text)
+        b:SetText(CWText(text))
         b:SetScript("OnClick", onClick)
         b:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(text)
-            GameTooltip:AddLine(tip, 1, 1, 1, true)
+            GameTooltip:AddLine(CWText(text))
+            GameTooltip:AddLine(CWText(tip), 1, 1, 1, true)
             GameTooltip:Show()
         end)
         b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -7590,7 +7611,7 @@ do
 
     -- Resource bars: the frame itself, then a row per pool in two columns
     local checks = {}
-    local bars = Group(LEFT, TOP, "Resource bars", "Saved on this computer, for every character.")
+    local bars = Group(LEFT, TOP, CWText("Resource bars"), CWText("Saved on this computer, for every character."))
     fly.barsGroup = bars
     local y, pools = 56, 0
     for i, row in ipairs(ROWS) do
@@ -7598,7 +7619,7 @@ do
             y = y + 8
             local h = bars:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             h:SetPoint("TOPLEFT", 16, -y)
-            h:SetText(CWText("|cffffd100") .. row.head .. "|r")
+            h:SetText(CWText("|cffffd100") .. CWText(row.head) .. "|r")
             y = y + 20
         elseif not row.head then
             local x, at = 18, y
@@ -7627,28 +7648,26 @@ do
         end
     end
     y = y + math.ceil(pools / 2) * 26 + 12
-    Button(bars, 18, y, "Reset bar position", "Puts the bars back under the player frame.",
+    Button(bars, 18, y, CWText("Reset bar position"), CWText("Puts the bars back under the player frame."),
         function() CW.ResetBarsPosition() end)
     bars:SetHeight(y + 22 + 18)
 
     -- Challenge tracker
-    local tracker = Group(RIGHT, TOP, "Challenge tracker", "Saved on this computer, for every character.")
+    local tracker = Group(RIGHT, TOP, CWText("Challenge tracker"), CWText("Saved on this computer, for every character."))
     fly.trackerGroup = tracker
-    fly.trackerCheck = Check(tracker, "ClasslessWildcardSettingTracker", 18, 56, "Show the tracker",
-        "The frame at the top of the screen during a challenge run: your lives, and what the "
-            .. "rule is counting. Drag it anywhere you like.",
+    fly.trackerCheck = Check(tracker, "ClasslessWildcardSettingTracker", 18, 56, CWText("Show the tracker"),
+        CWText("The frame at the top of the screen during a challenge run: your lives, and what the rule is counting. Drag it anywhere you like."),
         function(self) CW.SetTrackerShown(self:GetChecked() and true or false) end)
-    fly.trackerReset = Button(tracker, 18, 94, "Reset tracker position", "Puts the tracker back at the top of the screen.",
+    fly.trackerReset = Button(tracker, 18, 94, CWText("Reset tracker position"), CWText("Puts the tracker back at the top of the screen."),
         function() if CW.ResetTrackerPosition then CW.ResetTrackerPosition() end end)
     tracker:SetHeight(94 + 22 + 18)
 
     -- Abilities: kept on the server for this character, so the box shows what
     -- the server says and a click asks it to change
-    local abilities = Group(RIGHT, TOP + 134 + 16, "Abilities", "Saved for this character.")
+    local abilities = Group(RIGHT, TOP + 134 + 16, CWText("Abilities"), CWText("Saved for this character."))
     fly.abilitiesGroup = abilities
-    fly.autoShotCheck = Check(abilities, "ClasslessWildcardSettingAutoShot", 18, 56, "Disable Auto Shot",
-        "Auto Shot is taught while a bow, gun or crossbow is equipped. "
-            .. "Tick to keep it off whatever is equipped. Shoot still fires a bow, gun or crossbow.",
+    fly.autoShotCheck = Check(abilities, "ClasslessWildcardSettingAutoShot", 18, 56, CWText("Disable Auto Shot"),
+        CWText("Auto Shot is taught while a bow, gun or crossbow is equipped. Tick to keep it off whatever is equipped. Shoot still fires a bow, gun or crossbow."),
         function(self) Send("AUTOSHOT " .. (self:GetChecked() and 1 or 0)) end)
     abilities:SetHeight(56 + 24 + 18)
 
@@ -8750,6 +8769,14 @@ function rvFX.ScanSpell(spellId)
         local rfs = _G["ClasslessWildcardScanTipTextRight" .. i]
         local lt = lfs and lfs.GetText and lfs:GetText()
         local rt = rfs and rfs.GetText and rfs:GetText()
+        local function localizePowerLabel(text)
+            if not text then return text end
+            local label, rest = text:match("^([^:]+:)(.*)$")
+            if not label then return text end
+            local translated = CWText(label)
+            return translated .. rest
+        end
+        lt, rt = localizePowerLabel(lt), localizePowerLabel(rt)
         if lt == "" then lt = nil end
         if rt == "" then rt = nil end
         local cr, cg, cb = 1, 1, 1
@@ -8840,20 +8867,20 @@ local function ShowResult()
     -- one moment that should not read the same.
     local hex = string.format("|cff%02x%02x%02x", rgb[1] * 255, rgb[2] * 255, rgb[3] * 255)
     local kind = d.isTalent and "Talent" or "Ability"
-    rvTitle:SetText(r > 0 and (hex .. rvFX.tierName[r] .. " " .. kind .. "!|r")
-                           or (kind .. " Unlocked!"))
+    local heading = r > 0 and (rvFX.tierName[r] .. " " .. kind .. "!") or (kind .. " Unlocked!")
+    rvTitle:SetText(hex .. CWText(heading) .. "|r")
     if d.isTalent then
         -- rank IS the rarity for talents, so it is colored and shown large
-        rvName:SetText(SpellLabel(d.spell, d.rarity) .. "  " .. hex .. "Rank " .. (d.rank or 1) .. "|r")
+        rvName:SetText(SpellLabel(d.spell, d.rarity) .. "  " .. hex .. CWText("Rank ") .. (d.rank or 1) .. "|r")
     else
         rvName:SetText(SpellLabel(d.spell, d.rarity))
     end
     if d.test then
-        rvSub:SetText((RARITY_NAMES[d.rarity or 0] or "") .. "  |cffff8800(preview, nothing is granted)|r")
+        rvSub:SetText(CWText(RARITY_NAMES[d.rarity or 0] or "") .. "  |cffff8800" .. CWText("(preview, nothing is granted)") .. "|r")
     elseif d.flags == 1 then
         rvSub:SetText(CWText("|cff00ff88Synergy roll: it complements your Hero!|r"))
     elseif d.isTalent then
-        rvSub:SetText((RARITY_NAMES[d.rarity or 0] or "") .. "  |cffaaaaaaDealt free at Rank " .. (d.rank or 1) .. "|r")
+        rvSub:SetText(CWText(RARITY_NAMES[d.rarity or 0] or "") .. "  |cffaaaaaa" .. CWText("Dealt free at Rank ") .. (d.rank or 1) .. "|r")
     else
         rvSub:SetText(RARITY_NAMES[d.rarity or 0] or "")
     end
@@ -8925,7 +8952,7 @@ local function StartReveal(d)
     rvAnim.data = d
     -- say what is being rolled: a level can deal a talent AND an ability, so
     -- "the Wildcard rolls..." alone left you guessing which one you were seeing
-    rvTitle:SetText(d.isTalent and "Rolling a Talent..." or "Rolling an Ability...")
+    rvTitle:SetText(CWText(d.isTalent and "Rolling a Talent..." or "Rolling an Ability..."))
     rvGlow:SetVertexColor(0.45, 0.75, 1) -- cyan rim light while spinning
     rvGlow:SetAlpha(0)
     rvIcon:Hide()
@@ -8980,7 +9007,7 @@ local function AwaitReroll()
     rvAnim.awaiting = true
     rvAnim.awaitT0 = GetTime()
     local d = rvAnim.data
-    rvTitle:SetText((d and d.isTalent) and "Rerolling a Talent..." or "Rerolling an Ability...")
+    rvTitle:SetText(CWText((d and d.isTalent) and "Rerolling a Talent..." or "Rerolling an Ability..."))
     rvGlow:SetVertexColor(0.45, 0.75, 1)
     rvGlow:SetAlpha(0)
     rvIcon:Hide()
@@ -9178,7 +9205,7 @@ handTitle:SetText(CWText("Your Starting Hand"))
 local handHint = hand:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 handHint:SetPoint("TOP", 0, -40)
 handHint:SetText(CWText("Click an ability to lock it in: |cffffd100gold ring + closed padlock = kept|r.") ..
-    " Roll Abilities rerolls only the unlocked ones.")
+    " " .. string.format(CWText("Roll Abilities rerolls only the unlocked ones. Free until level %d!"), CW.state.freeReroll or 10))
 
 -- Four cards. Not a layout budget that happens to fit four -- four is the size
 -- of the starting hand, full stop. The server clamps StartingAbilities to the
@@ -9659,8 +9686,7 @@ hand:SetScript("OnShow", function()
         handRoll:Disable()
     else
         handHint:SetText(CWText("Click an ability to lock it in: |cffffd100gold ring + closed padlock = kept|r.") ..
-            " Roll Abilities rerolls only the unlocked ones. Free until level "
-            .. (CW.state.freeReroll or 10) .. "!")
+            " " .. string.format(CWText("Roll Abilities rerolls only the unlocked ones. Free until level %d!"), CW.state.freeReroll or 10))
         handRoll:Enable()
     end
     ClasslessWildcardCharDB = ClasslessWildcardCharDB or {}
@@ -10187,8 +10213,8 @@ local function HandleMessage(msg)
     elseif kind == "RD" then
         -- a life lost: lives left, lives at the start, what the rule did
         local lives, max, what = tonumber(p[2]) or 0, tonumber(p[3]) or 0, p[4] or ""
-        local head = CW.Unlimited(max) and "|cffff4444You died.|r The run goes on."
-            or ("|cffff4444A life lost.|r " .. lives .. CWText(" of ") .. max .. (lives == 1 and " life" or " lives") .. " left.")
+        local head = CW.Unlimited(max) and ("|cffff4444" .. CWText("You died. The run goes on.") .. "|r")
+            or ("|cffff4444" .. CWText("A life lost.") .. "|r " .. string.format(CWText(lives == 1 and "%d of %d life left." or "%d of %d lives left."), lives, max))
         StaticPopup_Show("CW_RUN_DEATH", head .. (what ~= "" and ("\n\n" .. what) or ""))
         Send("STATE")
     elseif kind == "RE" then
@@ -11975,7 +12001,7 @@ do
             return
         end
         P.close()
-        UIErrorsFrame:AddMessage("Pet talents open here when you have a tamed beast out.", 1.0, 0.82, 0.0)
+        UIErrorsFrame:AddMessage(CWText("Pet talents open here when you have a tamed beast out."), 1.0, 0.82, 0.0)
     end
 
     -- Any route onto a player spec -- the frame's own default on show, the

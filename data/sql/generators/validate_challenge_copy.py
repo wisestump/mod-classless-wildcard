@@ -130,9 +130,22 @@ TOKENS = (("{nemesis_levels}", "ClasslessWildcard.Nemesis.MarkedLevels", "nemesi
           ("{trophy_max}", "ClasslessWildcard.Nemesis.TrophyMax", "nemesisTrophyMax"))
 for token, option, field in TOKENS:
     says(n, "detail", token, "%s fills it from %s" % ("ChallengeText", option))
-    # the token filled from that very field, not just filled
-    need(re.search(r'fill\("%s", [\w:]+\(cfg\.%s\)\);' % (re.escape(token), field), mgr) is not None,
-         "ChallengeText fills %s from cfg.%s" % (token, field))
+    # Check the actual value expression passed to the replacement helper.
+    # CountWord/LevelShare/TimesLevel also format the value for the player's
+    # locale; the previous check only accepted a direct cfg.field function.
+    fill_values = {
+        "{nemesis_levels}": "CountWord(cfg.nemesisMarkedLevels, player)",
+        "{nemesis_bonus}": "LevelShare(cfg.nemesisMarkedBonusXpPct, player)",
+        "{sworn_levels}": "CountWord(cfg.nemesisSwornLevels, player)",
+        "{sworn_bonus}": "LevelShare(cfg.nemesisSwornBonusXpPct, player)",
+        "{sworn_cooldown}": "std::to_string(cfg.nemesisSwornCooldownMin)",
+        "{sworn_vengeance}": "TimesLevel(cfg.nemesisSwornVengeancePct, player)",
+        "{vengeance}": "std::to_string(cfg.nemesisVengeanceToFinish)",
+        "{trophy_max}": "CountWord(cfg.nemesisTrophyMax, player)",
+    }
+    need(re.search(r'fill\("%s",\s*%s\s*\);' %
+                   (re.escape(token), re.escape(fill_values[token])), mgr) is not None,
+         "ChallengeText fills %s from %s" % (token, fill_values[token]))
     shipped = re.search(r"^%s = (\d+)" % re.escape(option), conf, re.M)
     coded = re.search(r'GetOption<uint32>\("%s", (\d+)\)' % re.escape(option), mgr)
     member = re.search(r"\b%s = (\d+);" % field, cfgh)
@@ -140,8 +153,10 @@ for token, option, field in TOKENS:
          "%s: the conf, the code and the Config default agree (%s / %s / %s)"
          % (option, shipped and shipped.group(1), coded and coded.group(1), member and member.group(1)))
 says(n, "rule", "{nemesis_levels} levels above you", "MarkNemesis: the Hero's level plus the offset")
-need("ChallengeText(ch.rule)" in read("src", "ClasslessAddon.cpp") and "SanitizeText(sClasslessMgr->ChallengeText(raw))"
-     in read("src", "ClasslessAddon.cpp"), "the addon is sent the filled text")
+addon = read("src", "ClasslessAddon.cpp")
+need("sClasslessMgr->ChallengeText(raw, player)" in addon and
+     "SanitizeText(sClasslessMgr->ChallengeText(raw, player))" in addon,
+     "the addon receives the player's localized, filled challenge text")
 says(n, "detail", "a death takes nothing from you", "MarkNemesis takes no experience")
 says(n, "detail", "stays at least that far above you as you level", "ResyncNemesisCopy follows the Hero's level")
 # never below the creature's own level: dying to something far above you must not make it easy
@@ -168,7 +183,7 @@ need("return st.nemesisVengeance >= cfg.nemesisVengeanceToFinish;" in mgr, "RunG
 need("uint32(creature->GetLevel()) * (sworn ? cfg.nemesisSwornVengeancePct : 100) / 100" in mgr,
      "a kill gives its level in Vengeance, the Sworn percent for a Sworn one")
 says(n, "detail", "{marked_vengeance}, or {sworn_vengeance} for a Sworn one", "NemesisSlain's Vengeance")
-need('fill("{marked_vengeance}", TimesLevel(100));' in mgr, "{marked_vengeance} is its level")
+need('fill("{marked_vengeance}", TimesLevel(100, player));' in mgr, "{marked_vengeance} is its level")
 # traits
 says(n, "detail", "gains another strength, up to %s" % word(max_strengths), "MarkNemesis: AddNemesisStrength, NEMESIS_MAX_STRENGTHS")
 need("AddNemesisStrength(itr->second);" in mgr, "a death to the copy adds a strength")
@@ -179,10 +194,12 @@ says(n, "detail", "Bloodlust, one more strength and a weakness", "SwearVendetta"
 need("mark.strengths[0] = NS_BLOODLUST;\n    AddNemesisStrength(mark);\n    mark.weakness = RollNemesisWeakness();"
      in mgr.replace("\r\n", "\n"), "SwearVendetta gives Bloodlust, one more strength and a weakness")
 says(n, "detail", "one Sworn nemesis at a time", "CanSwearVendetta refuses a second")
-need('fail("You have a sworn nemesis already. Slay it first.")' in mgr, "CanSwearVendetta refuses a second Sworn")
+need(re.search(r'return\s+fail\("You have a sworn nemesis already\. Slay it first\.",\s*"[^"]+"\);', mgr) is not None,
+     "CanSwearVendetta refuses a second Sworn with localized error text")
 says(n, "detail", "not an elite or a boss", "CanSwearVendetta")
-need('fail("Not on an elite or a boss.")' in mgr and 'fail("Not in a dungeon or raid.")' in mgr,
-     "CanSwearVendetta refuses elites, bosses and dungeons")
+need(re.search(r'return\s+fail\("Not on an elite or a boss\.",\s*"[^"]+"\);', mgr) is not None and
+     re.search(r'return\s+fail\("Not in a dungeon or raid\.",\s*"[^"]+"\);', mgr) is not None,
+     "CanSwearVendetta refuses elites, bosses and dungeons with localized error text")
 says(n, "detail", "at your level or above", "CanSwearVendetta refuses a target below the Hero")
 need("if (target->GetLevel() < player->GetLevel())" in mgr, "CanSwearVendetta refuses a target below the Hero")
 # the trait auras: the same spell ids on the server, in the client patch and in the addon
@@ -191,7 +208,7 @@ srv = ids(r"NEMESIS_STRENGTH_SPELLS\[7\] = \{([^}]*)\}", hdr) + ids(r"NEMESIS_WE
       + ids(r"NEMESIS_HIDDEN_WEAKNESS_SPELL = (\d+);", hdr)
 dbcpy = read("client-patch", "lib", "dbc.py")
 lua_text = read("client-addon", "ClasslessWildcard", "ClasslessWildcard.lua")
-lua_ids = [int(x) for x in re.findall(r"^    \[(\d+)\] = \"", lua_text[lua_text.index("CW.NEMESIS_TRAIT_TEXT"):], re.M)][:16]
+lua_ids = [int(x) for x in re.findall(r"^    \[(\d+)\] = CWText\(\"", lua_text[lua_text.index("CW.NEMESIS_TRAIT_TEXT"):], re.M)][:16]
 need(len(srv) == 16 and len(set(srv)) == 16, "16 distinct trait spells on the server (%d)" % len(set(srv)))
 need(all(re.search(r"^    %d: \(\"" % i, dbcpy, re.M) and re.search(r"^    %d: \"Interface" % i, dbcpy, re.M) for i in srv),
      "the client patch names every trait spell and gives it an icon")
