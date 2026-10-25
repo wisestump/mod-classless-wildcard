@@ -124,9 +124,10 @@ public:
     // its abilities and talent ranks are bought for the Hero as each one
     // becomes available. Id 0 stops following.
     bool ApplyArchetype(Player* player, uint32 archetypeId, std::string* err);
-    std::string ArchetypeName(uint32 archetypeId) const;
+    std::string ArchetypeName(uint32 archetypeId, Player* player = nullptr) const;
+    std::string ArchetypeDescription(uint32 archetypeId, Player* player = nullptr) const;
     // the name of what this character follows, its own build included
-    std::string ArchetypeName(ClasslessWildcard::CharState const& st) const;
+    std::string ArchetypeName(ClasslessWildcard::CharState const& st, Player* player = nullptr) const;
     // A starter archetype by id, or the character's own build for
     // CUSTOM_ARCHETYPE. nullptr when there is neither.
     ClasslessWildcard::Archetype const* FindArchetype(ClasslessWildcard::CharState const& st, uint32 id) const;
@@ -137,7 +138,7 @@ public:
     // prerequisites, and the whole plan must fit the essence a Hero with no
     // Rebirth bonus earns by the cap, so a shared build works for anyone.
     // Cleans the name in place. False with a player-facing reason otherwise.
-    bool ValidateCustomArchetype(ClasslessWildcard::Archetype& arch, std::string* err);
+    bool ValidateCustomArchetype(Player* player, ClasslessWildcard::Archetype& arch, std::string* err);
     // Every row's problem, for the editor to mark: kind 'A' or 'T', the row's
     // index in its list (0-based) and a code ("gone", "twice", "rank",
     // "never").
@@ -154,7 +155,7 @@ public:
     // that comes free with another entry costs nothing.
     struct PlanBudget { uint32 spentA = 0, totalA = 0, spentT = 0, totalT = 0; };
     PlanBudget BudgetOf(ClasslessWildcard::Archetype const& arch) const;
-    std::string SpellNameOf(uint32 spellId) const;   // rank-1 spell name, for chat lines
+    std::string SpellNameOf(uint32 spellId, Player* player = nullptr) const;   // rank-1 spell name, for chat lines
     struct FollowResult
     {
         uint32 abilities = 0;
@@ -217,7 +218,8 @@ public:
     static ClasslessWildcard::Challenge const* GetChallenge(uint8 id);
     // A challenge's text as players read it: the {tokens} in it filled from
     // this realm's config, so the text says what the realm actually does.
-    std::string ChallengeText(char const* raw) const;
+    std::string ChallengeText(char const* raw, Player* player = nullptr) const;
+    std::string ChallengeName(ClasslessWildcard::Challenge const& challenge, Player* player = nullptr) const;
     static constexpr uint32 HUNTER_ENTRY = 990099;      // Pursued's hunter, cw_world_challenges.sql
     static constexpr uint32 EXTRA_LIFE_SHARDS = 30;
     // A run starts before ModeChoiceDeadline. The character stays on its own
@@ -290,8 +292,9 @@ public:
     ClasslessWildcard::NemesisMark* MarkOfCopy(Creature const* copy, Player* owner);
     void AddNemesisStrength(ClasslessWildcard::NemesisMark& mark);
     static uint8 RollNemesisWeakness();
-    static char const* NemesisStrengthName(uint8 strength);
-    static char const* NemesisWeaknessName(uint8 weakness);
+    static std::string NemesisStrengthName(uint8 strength, Player* player = nullptr);
+    static std::string NemesisWeaknessName(uint8 weakness, Player* player = nullptr);
+    std::string LocalizedCreatureName(Player* player, uint32 entry) const;
     // Its Hero has found something out; true when it is new to them.
     bool LearnNemesis(Player* player, Creature const* copy, uint8 what);
     // A line from the nemesis to its Hero alone (it is visible to no one else).
@@ -324,7 +327,7 @@ public:
     void SaveNemesisRun(ObjectGuid guid, ClasslessWildcard::CharState const& st);
     void SaveNemesisCharm(ObjectGuid guid, ClasslessWildcard::CharState const& st);
     // A title for a nemesis, from how it was made and what it is.
-    static std::string NemesisTitle(ClasslessWildcard::NemesisMark const& mark);
+    static std::string NemesisTitle(ClasslessWildcard::NemesisMark const& mark, Player* player = nullptr);
     // NL: each nemesis, for the tracker's list and the world map pins:
     // NLB, then "NL|name|title|kind|levels|strengths|weakness|zone|x|y" for each, then NLE.
     // What the Hero has not found out yet is sent as "?".

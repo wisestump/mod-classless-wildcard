@@ -16,6 +16,7 @@
 #include "Chat.h"
 #include "ConditionMgr.h"
 #include "ClasslessBots.h"
+#include "ClasslessLocale.h"
 #include "ClasslessMgr.h"
 #include "Containers.h"
 #include "DBCStores.h"
@@ -29,6 +30,7 @@
 #include "Pet.h"
 #include <algorithm>
 #include <mutex>
+#include <string_view>
 #include <vector>
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -1250,12 +1252,17 @@ public:
             if (refund)
                 player->ModifyMoney(int32(refund));
             bool const wildcard = sClasslessMgr->GetState(player).mode == Mode::Wildcard;
-            std::string text = Acore::StringFormat("|cff00ccff[Classless]|r Heroes cannot learn {} this way. {}",
-                sClasslessMgr->SpellNameOf(firstSpell),
-                wildcard ? "Wildcard abilities come from your rolls."
-                         : "Buy it with Ability Essence in /cw or at the Hero Advancement NPC.");
+            std::string text = Acore::StringFormat(LocaleText(player,
+                "|cff00ccff[Classless]|r Heroes cannot learn {} this way. {}",
+                "|cff00ccff[Classless]|r герои не могут выучить {} таким способом. {}"),
+                sClasslessMgr->SpellNameOf(firstSpell, player),
+                LocaleText(player,
+                    wildcard ? "Wildcard abilities come from your rolls."
+                             : "Buy it with Ability Essence in /cw or at the Hero Advancement NPC.",
+                    wildcard ? "Случайные способности получаются при перебросах."
+                             : "Купите её за эссенцию способностей через /cw или у наставника развития героя."));
             if (refund)
-                text += " Your money has been returned.";
+                text += LocaleText(player, " Your money has been returned.", " Деньги возвращены.");
             ChatHandler(player->GetSession()).SendSysMessage(text);
         }, 1ms);
     }
@@ -2171,7 +2178,10 @@ public:
         };
         auto refuse = [player](char const* text)
         {
-            ChatHandler(player->GetSession()).SendNotification(text);
+            ChatHandler(player->GetSession()).SendNotification(LocaleText(player, text,
+                std::string_view(text) == "Trophies and your Nemesis Charm stay in your bags."
+                    ? "Трофеи и талисман Немезиды должны оставаться в сумках."
+                    : "Талисман Немезиды нельзя уничтожить."));
             return false;
         };
         try

@@ -22,7 +22,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from lib import blp, dbc, elemental  # noqa: E402
+from lib import blp, dbc, elemental, locales  # noqa: E402
 
 FAILURES = []
 
@@ -47,6 +47,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dbc", required=True, help="directory holding extracted 3.3.5a DBCs")
     ap.add_argument("--manifest", default=elemental.manifest_path())
+    ap.add_argument("--locale", choices=("enUS", "ruRU"), default="ruRU",
+                    help="locale columns to write and verify (default: ruRU)")
     args = ap.parse_args(argv)
 
     def read(name):
@@ -57,6 +59,17 @@ def main(argv=None):
             return fh.read()
 
     manifest = elemental.load_manifest(args.manifest)
+    if args.locale == "ruRU":
+        class DbcDirectory:
+            def find(self, path):
+                name = path.rsplit("\\", 1)[-1]
+                with open(os.path.join(args.dbc, name), "rb") as source:
+                    return source.read(), os.path.join(args.dbc, name)
+
+        locales.apply_ruRU(manifest, locales.load_catalog(), "variants",
+                           files=DbcDirectory())
+    else:
+        locales.clear_ruRU(manifest, "variants")
     variants = [dict(v, fields=dict(v["fields"])) for v in manifest["variants"]]
     # duration index -> milliseconds, so a burn can be checked against the room
     # the spell actually has for it
@@ -85,7 +98,12 @@ def main(argv=None):
         u = lambda f: struct.unpack_from("<I", row, f * 4)[0]
         ok = (cstr(strings, u(136)) == v["name"]
               and cstr(strings, u(170)) == v["description"]
-              and all(u(c) == u(136) for c in range(136, 152))
+              and all(cstr(strings, u(first + locale)) ==
+                      (v.get("ruRU", {}).get(field, "")
+                       if args.locale == "ruRU" and locale == elemental.LOCALE_RURU else "")
+                      for (first, _mask), field in zip(elemental.LOCALE_BLOCKS,
+                          ("name", "rank_text", "description", "tooltip"))
+                      for locale in range(1, 16))
               and all(u(int(k)) == (int(val) & 0xFFFFFFFF) for k, val in v["fields"].items()
                       if int(k) not in elemental.FLOAT_FIELDS))
         if not ok:

@@ -23,6 +23,7 @@ Covered flows:
 Run:  python3 test_addon_flow.py
 """
 import io
+import json
 import os
 import re
 import sys
@@ -192,6 +193,7 @@ end
 
 -- API calls whose return values the addon reads
 function SendAddonMessage(prefix, msg, channel, target) SENT[#SENT + 1] = msg end
+function GetLocale() return TEST_LOCALE or "enUS" end
 function GetNumRaidMembers() return 0 end
 function GetNumPartyMembers() return 0 end
 function UnitName() return "''' + PLAYER + r'''" end
@@ -524,9 +526,13 @@ def state(mode, ae=12, te=3, level=20, rerolls=0, scroll_buy=0, free_reroll=10):
 
 
 class Harness:
-    def __init__(self):
+    def __init__(self, locale="enUS"):
         self.rt = LuaRuntime(unpack_returned_tuples=True)
+        self.rt.globals().TEST_LOCALE = locale
         self.rt.execute(STUBS)
+        for path in ("Locales/enUS.lua", "Locales/ruRU.lua", "Locales.lua"):
+            source = os.path.join(HERE, "ClasslessWildcard", path)
+            self.rt.execute(io.open(source, encoding="utf-8").read())
         self.rt.execute(io.open(ADDON, encoding="utf-8").read())
         self.g = self.rt.globals()
         self.CW = self.g.ClasslessWildcard_API
@@ -645,6 +651,55 @@ def test_archetypes(h):
     h.check(rows[1]["__shown"] is True and rows[2]["__shown"] is False, "a new reply replaces the cached list")
     h.check("Ranger" in str(rows[1].name["__text"]), "row 1 is the new archetype")
     h.check(fly.list.scroll["__h"] == 58 and fly.list.child["__h"] == 58, "one row: the list is one row tall, nothing to scroll")
+
+    # The ruRU archetype description is 272 UTF-8 bytes, so its AR row cannot
+    # fit the server's 200-byte addon budget. Reassemble it from bounded,
+    # out-of-order fragments and verify the exact bytes become the displayed
+    # text only after ARE closes the response.
+    with io.open(os.path.join(HERE, "..", "data", "locales", "ruRU.json"), encoding="utf-8") as f:
+        ru_arch = json.load(f)["archetypes"]["17"]
+    name, desc = ru_arch["name"], ru_arch["description"]
+    direct = "AR|17|%s|%s|26|71|0" % (name, desc)
+    h.check(len(direct.encode("utf-8")) > 200, "ruRU archetype 17 exceeds MAX_BODY before chunking")
+
+    def utf8_pieces(value, limit=168):
+        raw, out, pos = value.encode("utf-8"), [], 0
+        while pos < len(raw):
+            end = min(pos + limit, len(raw))
+            while end < len(raw) and (raw[end] & 0xC0) == 0x80:
+                end -= 1
+            out.append(raw[pos:end].decode("utf-8"))
+            pos = end
+        return out
+
+    name_parts, desc_parts = utf8_pieces(name), utf8_pieces(desc)
+    h.recv("ARS|17|26|71|0|%d|%d" % (len(name_parts), len(desc_parts)))
+    for i, part in reversed(list(enumerate(desc_parts, 1))):
+        packet = "ARF|17|D|%d|%s" % (i, part)
+        h.check(len(packet.encode("utf-8")) <= 200, "every description fragment fits MAX_BODY")
+        h.recv(packet)
+    for i, part in reversed(list(enumerate(name_parts, 1))):
+        packet = "ARF|17|N|%d|%s" % (i, part)
+        h.check(len(packet.encode("utf-8")) <= 200, "every name fragment fits MAX_BODY")
+        h.recv(packet)
+    h.recv("ARE|")
+    h.check(str(CW.archetypes[1].name) == name and str(CW.archetypes[1].desc) == desc,
+            "multipart archetype preserves the exact ruRU name and description")
+
+    # An incomplete record is dropped at the end marker, rather than exposing
+    # a partial UTF-8 field or throwing while concatenating missing indexes.
+    h.recv("ARS|18|26|71|0|1|2")
+    h.recv("ARF|18|N|1|short")
+    h.recv("ARE|")
+    h.check(len(CW.archetypes) == 0, "incomplete archetype rows are omitted safely")
+
+    # A response with no ARE marker also drops partial rows after a bounded
+    # timeout, allowing the list UI to leave its loading state.
+    h.recv("ARS|19|26|71|0|1|1")
+    h.rt.execute("NOW = NOW + 31")
+    h.events["__scripts"]["OnUpdate"](h.events, 0)
+    h.check(CW._archStarted is None and len(CW.archetypes) == 0,
+            "stalled multipart archetype responses expire cleanly")
 
     # the shipped realm sends eighteen: rows are made on demand and the list
     # scrolls instead of growing the flyout past the panel
@@ -2132,7 +2187,7 @@ def test_challenge_runs(h):
     tip = str(g.TipText())
     hc = CW.challengesById[3]
     h.check(g.rawequal(g.TIP.owner, badge) and g.TIP.shown is True and "Hardcore" in tip and "Your challenge run" in tip
-            and str(hc.detail or hc.rule)[:40] in tip and "Lives 3 of 3 left" in tip and "Gold" in tip
+            and str(hc.detail or hc.rule)[:40] in tip and "Lives 3 of 3 lives left" in tip and "Gold" in tip
             and "Click for the challenge page" in tip and "clock" not in tip,
             "the badge's hover card has the rule, the lives and the rewards: %r" % tip[:300])
     h.check(("Title" in tip) == (str(hc.title or "") != ""), "the title is named when the challenge has one")
@@ -2341,7 +2396,7 @@ def test_challenge_runs(h):
     h.rt.execute("ClasslessWildcard_API.challengesById[1].vengeance = 500")
     CW.RunTooltip(CW.runBadge)
     tip = [str(g.TIP[i]) for i in range(1, len(g.TIP) + 1)]
-    h.check("Reach level 80 with 500 Vengeance for" in tip,
+    h.check(("Reach level %d with 500 Vengeance for" % CW.rules.maxLevel) in tip,
             "the badge's card names the Vengeance as the goal: %r" % [t for t in tip if "Reach" in t])
     h.recv("NLB|")
     h.recv("NLE|")
@@ -3229,7 +3284,7 @@ def test_nemesis_titles_and_charms(h):
     h.rt.execute("TIP = {}; GameTooltip.GetUnit = function() return 'Wolf', 'target' end")
     h.rt.execute("ClasslessWildcard_API.NemesisUnitTooltip(GameTooltip)")
     tip = [str(v) for v in h.rt.globals().TIP.values()]
-    h.check("Your nemesis, Twice-Victorious" in tip, "its tooltip says it is yours, and its title: %r" % tip)
+    h.check("Your nemesis: Twice-Victorious" in tip, "its tooltip says it is yours, and its title: %r" % tip)
     h.recv("NG|")
 
     # trophies and the charm: numbers from NT, nothing in the item rows
@@ -3242,10 +3297,10 @@ def test_nemesis_titles_and_charms(h):
     h.recv("NT|0.80,2.00,6.00,0.40,1.20,1.20,0.80|0,3,0,0,0,0,5|4")
     item(991000)
     h.check(tiptext()[0] == "+0.8% haste", "Trophy of Bloodlust I: %r" % tiptext()[0])
-    h.check("On finishing, if it is your best of its kind: Bloodlust rank 0 to 1 of 5 on your Nemesis Charm." in tiptext(),
+    h.check("When the run ends, your best trophy of this kind raises Bloodlust on your Nemesis Charm from rank 0 to 1 of 5." in tiptext(),
             "it says what it would add to the charm: %r" % tiptext())
     item(991005)
-    h.check("On finishing, if it is your best of its kind: Ironhide rank 3 to 5 of 5 on your Nemesis Charm." in tiptext(),
+    h.check("When the run ends, your best trophy of this kind raises Ironhide on your Nemesis Charm from rank 3 to 5 of 5." in tiptext(),
             "counting the rank the charm has, up to 5: %r" % tiptext())
     item(991008)
     h.check(tiptext()[0] == "+18 resistance to every school", "Trophy of Spellward III: %r" % tiptext()[0])
@@ -5128,7 +5183,344 @@ def test_challenge_tracker(h):
     h.check(f["__shown"] is False, "the run over, it goes away")
 
 
+def test_locale_selection():
+    print("--- Locale selection and English fallback")
+    en = Harness("enUS")
+    en_locale = en.g.ClasslessWildcardLocale
+    en.check(str(en_locale.ui.title) == "Hero Advancement" and
+             str(en_locale.classes[1]) == "Warrior" and
+             str(en.CW.helpBtn["__text"]) == "Help",
+             "enUS uses its base strings")
+    fallback = Harness("frFR")
+    fallback_locale = fallback.g.ClasslessWildcardLocale
+    fallback.check(str(fallback_locale.ui.title) == "Hero Advancement" and
+                   str(fallback_locale.classes[1]) == "Warrior" and
+                   str(fallback.CW.helpBtn["__text"]) == "Help",
+                   "an untranslated locale falls back to enUS")
+    ru = Harness("ruRU")
+    ru_locale = ru.g.ClasslessWildcardLocale
+    ru.check(str(ru_locale.ui.title) == "Развитие героя" and
+             str(ru_locale.classes[1]) == "Воин" and
+             str(ru_locale.text["Help"]) == "Справка" and
+             str(ru.CW.helpBtn["__text"]) == "Справка",
+             "ruRU loads translations into visible controls")
+    ru.check("Свободный путь" in str(ru.CW.wiz.cards[1].name["__text"]) and
+             str(ru.CW.wiz.cards[1].button["__text"]) == "Выбрать свободный путь" and
+             "Вы сами выбираете способности и таланты." in str(ru.CW.wiz.cards[1].body["__text"]),
+             "ruRU translates the first-login path wizard")
+    help_pages = ru.CW.HelpSections()
+    ru.check(str(help_pages[1]["title"]) == "Начало" and
+             str(help_pages[1]["blocks"][1]["head"]) == "Вы — герой" and
+             "любого класса игры" in str(help_pages[1]["blocks"][1]["text"]) and
+             "двумя путями" in str(help_pages[1]["blocks"][2]["text"]),
+             "ruRU translates the guide headings and its dynamic path paragraph")
+    quest_prompt = "Wipe all quest progress?\n\nWipe: every quest can be done again for its XP and rewards. Keep: quests you have done stay done."
+    ru.check(str(ru.g.StaticPopupDialogs["CW_CLASSLESS_REBIRTH_QUESTS"]["text"]) ==
+             str(ru_locale.text[quest_prompt]),
+             "ruRU translates both quest outcomes in the pre-confirm dialog")
+    ru.recv(rebirth_state(1, 80, 1, 1, 250, 2))
+    ru.CW.AskRebirth()
+    ru.g.StaticPopupDialogs["CW_CLASSLESS_REBIRTH_QUESTS"]["OnAccept"]()
+    confirm_template = ("Rebirth %d on your %s path for |cffffd100%d gold|r.\n\n"
+                        "Back to level 1. Heirlooms: %s.\n%s")
+    confirm_text = str(ru_locale.text[confirm_template]) % (
+        2, "|cffff8800" + str(ru_locale.text["Wildcard"]) + "|r", 250,
+        str(ru_locale.text["None"]), str(ru_locale.text["Quests: wiped."]))
+    ru.check(str(ru.g.LAST_POPUP_ARG) == confirm_text,
+             "ruRU localizes the complete Rebirth confirmation and its consequences")
+    ru.CW.AskRebirth()
+    ru.g.StaticPopupDialogs["CW_CLASSLESS_REBIRTH_QUESTS"]["OnCancel"]()
+    keep_confirm = str(ru_locale.text[confirm_template]) % (
+        2, "|cffff8800" + str(ru_locale.text["Wildcard"]) + "|r", 250,
+        str(ru_locale.text["None"]), str(ru_locale.text["Quests: kept."]))
+    ru.check(str(ru.g.LAST_POPUP_ARG) == keep_confirm,
+             "ruRU confirmation also explains that completed quests will stay done")
+
+    # The outcome cards are assembled from runtime values, then rendered
+    # verbatim by ShowSummary. Keep their headings, labels, notes and formatted
+    # values covered in the Russian harness.
+    run_packet = ru.rt.table()
+    for i, value in enumerate(("RE", "1", "80", "142", "400",
+                               str(ru_locale.text["Glass"]), "5", "3", "3", "0", "", "", "1", "0", "0"), 1):
+        run_packet[i] = value
+    run_spec = ru.CW.RunEndSpec(run_packet)
+    run_sections = run_spec["sections"]
+    run_rows = run_sections[1]["rows"]
+    run_notes = run_spec["notes"]
+    ru.check(str(run_spec["title"]) == str(ru_locale.text["Challenge Complete"]) and
+             str(run_sections[1]["header"]) == str(ru_locale.text["The run"]) and
+             str(run_sections[2]["header"]) == str(ru_locale.text["Rewards"]) and
+             str(run_rows[1][1]) == str(ru_locale.text["Level reached"]) and
+             str(run_rows[2][1]) == str(ru_locale.text["Lives left"]) and
+             str(run_notes[1]) == str(ru_locale.text["Not a life lost: a third more shards."]) and
+             str(run_notes[2]) == str(ru_locale.text["Gold is paid for the first finish only."]) and
+             str(run_notes[3]) == str(ru_locale.text["The rule lifts."]),
+             "ruRU translates dynamic challenge outcome card labels and notes")
+    ru.CW.ShowSummary(run_spec)
+    run_card = ru.CW.summary
+    ru.check(str(run_card["title"]["__text"]) == str(ru_locale.text["Challenge Complete"]) and
+             str(run_card["headers"][1]["__text"]) == str(ru_locale.text["The run"]) and
+             str(run_card["notes"][1]["__text"]) == str(ru_locale.text["Not a life lost: a third more shards."]),
+             "ruRU challenge summary renders the localized text without replacing it")
+    run_card.Hide(run_card)
+
+    rebirth_packet = ru.rt.table()
+    for i, value in enumerate(("RB", "2", "150", "50", "6", "0", "2", "9", "4", "3", "", ""), 1):
+        rebirth_packet[i] = value
+    rebirth_spec = ru.CW.RebirthDoneSpec(rebirth_packet)
+    rebirth_sections = rebirth_spec["sections"]
+    rebirth_rows = rebirth_sections[1]["rows"]
+    rebirth_life = rebirth_sections[2]["rows"]
+    rebirth_notes = rebirth_spec["notes"]
+    ru.check(str(rebirth_spec["subtitle"]) == str(ru_locale.text["A new life begins at level 1."]) and
+             str(rebirth_spec["button"]) == str(ru_locale.text["Begin"]) and
+             str(rebirth_sections[1]["header"]) == str(ru_locale.text["Your rank"]) and
+             str(rebirth_sections[2]["header"]) == str(ru_locale.text["This life"]) and
+             str(rebirth_rows[1][1]) == str(ru_locale.text["Kills and dungeons"]) and
+             str(rebirth_life[4][1]) == str(ru_locale.text["Quest history"]) and
+             str(rebirth_notes[1]) == str(ru_locale.text["Every quest pays its experience again."]) and
+             str(rebirth_notes[2]) == str(ru_locale.text["%d pieces of gear did not fit in your bags and were mailed to you."]) % 2 and
+             str(rebirth_notes[3]) == str(ru_locale.text["Your next Rebirth carries up to %d heirlooms."]) % 3,
+             "ruRU translates dynamic Rebirth outcome card sections, gear mail and heirlooms")
+    ru.CW.ShowSummary(rebirth_spec)
+    rebirth_card = ru.CW.summary
+    ru.check(str(rebirth_card["title"]["__text"]) == str(ru_locale.text["Rebirth "]) + "2" and
+             str(rebirth_card["button"]["__text"]) == str(ru_locale.text["Begin"]) and
+             str(rebirth_card["headers"][1]["__text"]) == str(ru_locale.text["Your rank"]) and
+             str(rebirth_card["notes"][2]["__text"]) == str(ru_locale.text[
+                 "%d pieces of gear did not fit in your bags and were mailed to you."]) % 2,
+             "ruRU Rebirth summary shows localized dynamic consequence text")
+    rebirth_card.Hide(rebirth_card)
+
+    ru.recv(rebirth_state(0, 80, 1, 1, 250, 2))
+    ru.CW.RenderRebirth()
+    rebirth_fly = ru.CW.rebirthFly
+    expected_intro = (str(ru_locale.text["|cffffd100Kept:|r gold, bags, bank, reputation, riding and flight paths.\n"]) +
+                      str(ru_locale.text["|cffffd100Reset:|r your level, build and stat points. Worn gear goes into your bags, or by mail if they are full.\n"]) +
+                      str(ru_locale.text["|cffffd100Quests:|r you choose next whether they are wiped or kept."]))
+    expected_path = str(ru_locale.text["A new life begins at level 1 on your %s path."]) % (
+        "|cff00ccff" + str(ru_locale.text["Classless"]) + "|r")
+    ru.check(str(rebirth_fly["intro"]["__text"]) == expected_intro and
+             str(rebirth_fly["subtitle"]["__text"]) == expected_path and
+             "Reset:" not in str(rebirth_fly["intro"]["__text"]) and
+             "Quests:" not in str(rebirth_fly["intro"]["__text"]) and
+             "Classless" not in str(rebirth_fly["subtitle"]["__text"]) and
+             "path." not in str(rebirth_fly["subtitle"]["__text"]),
+             "ruRU Rebirth picker translates reset, quests and the dynamic path")
+    ru.recv(state(0))
+    ru.check(str(ru.CW.archBtn["__text"]) == "Архетипы" and
+             str(ru.CW.rebirthBtn["__text"]) == "Испытание",
+             "ruRU keeps translated labels after state changes")
+    ru.clear_sent()
+    ru.click(ru.CW.archBtn)
+    ru.check("ARCH" in ru.sent(), "localized controls keep the technical addon protocol unchanged")
+    ru.rt.execute("PRINTED = {}; DEFAULT_CHAT_FRAME.AddMessage = function(self, m) table.insert(PRINTED, m) end; SlashCmdList['CLASSLESSWILDCARDBARS']('lock')")
+    ru.check("Полосы ресурсов закреплены." in str(ru.g.PRINTED[1]),
+             "ruRU localizes a slash-command response")
+    ru.rt.execute("ERRORS = {}; UIErrorsFrame = { AddMessage = function(self, m) table.insert(ERRORS, m) end }")
+    ru.CW.SayNoRerolls()
+    ru.check("Сданный набор нельзя перебросить." in str(ru.g.ERRORS[1]),
+             "ruRU localizes a visible local error")
+    ru.rt.execute("ClasslessWildcard_API.ReadNemesisTraitNums({'NX', '5'})")
+    ru.check("на 5% быстрее" in str(ru.CW.NemesisTraitText(54060)) and
+             "Трофей: Кровожадность I" == str(ru.CW.TrophyName(991000)) and
+             str(ru.g.BINDING_NAME_CLASSLESSWILDCARD_HELP) == "Открыть или закрыть справку",
+             "ruRU localizes Nemesis traits, trophies and key bindings")
+    ru.rt.execute("CW.stats = { strMeleeAP = 2 }")
+    stat_text = str(ru.CW.StatContribution(1, 10))
+    ru.check("attack power" not in stat_text and " ближнем бою" in stat_text,
+             "ruRU localizes calculated stat and effect prose")
+    ru.recv("CH|1|Nemesis|5|500|Rule text|0|0|0|")
+    challenge = ru.CW.challengesById[1]
+    ru.check(str(challenge.name) == str(ru_locale.text["Nemesis"]),
+             "known challenge names in server payloads use the client locale")
+    challenge_names = ["Nemesis", "Elite World", "Legion", "Pursued", "Hourglass", "Glass",
+                       "Spiteful", "Bloodpact", "Berserker", "Ironman", "Big Game Hunter",
+                       "Dealt Hand", "Hardcore"]
+    for index, name in enumerate(challenge_names, 2):
+        ru.recv("CH|%d|%s|3|0|Rule|0|0|0|" % (index, name))
+    ru.check(all(str(ru.CW.challengesById[index].name) == str(ru_locale.text[name])
+                 for index, name in enumerate(challenge_names, 2)),
+             "every stable challenge label maps without changing its numeric id")
+    lives_one = str(ru_locale.text["%d life out of %d remains"]) % (1, 5)
+    lives_few = str(ru_locale.text["%d lives (few) out of %d remain"]) % (4, 5)
+    lives_many = str(ru_locale.text["%d lives out of %d remain"]) % (5, 5)
+    ru.check(str(ru.CW.LivesLeftText(1, 5)) == lives_one and
+             str(ru.CW.LivesLeftText(4, 5)) == lives_few and
+             str(ru.CW.LivesLeftText(5, 5)) == lives_many and
+             str(ru.CW.LivesLeftText(255, 255)) == str(ru_locale.text["unlimited lives"]),
+             "ruRU formats one, few, many, and unlimited remaining lives")
+
+    # Exercise the visible status line with a current run and with a different
+    # live run, using the same state packets as the addon protocol.
+    ru.recv(run_state(1, 20, run=1, lives=2, lives_max=5, shards=10, extra=1))
+    ru.CW.OpenRuns()
+    ru.CW.RenderRuns(True)
+    runs_ru = ru.CW.runFly
+    req = str(runs_ru["req"]["__text"])
+    same_run = str(ru_locale.text["|cffff8800You are on this run|r: %s."]) % str(ru.CW.LivesLeftText(2, 5))
+    ru.check(same_run in req and "You are on this run" not in req and "left" not in req,
+             "ruRU shows the current-run status and remaining-life count")
+    life_text = str(runs_ru["livesText"]["__text"])
+    expected_life_text = str(ru_locale.text["|cffffffff%d lives|r on this challenge%s. A death costs one. Deaths in battlegrounds, arenas and duels cost nothing. Run out and the run ends: the rule lifts, and you keep your level, gear and build."]) % (
+        5, str(ru_locale.text[", plus the extra life you hold"]))
+    ru.check(life_text == expected_life_text and "A death costs one" not in life_text,
+             "ruRU translates the life count, extra life, and death rules as one formatted sentence")
+    expected_summary = str(ru_locale.text["Starts with |cffffffff%d lives|r"]) % 6
+    ru.check(str(runs_ru["summary"]["__text"]) == expected_summary and
+             str(runs_ru["life"]["__text"]) == str(ru_locale.text["Extra life held"]) and
+             "extra life held" not in str(runs_ru["shards"]["__text"]),
+             "ruRU localizes the run summary, extra-life button, and shard status")
+    ru.recv(run_state(1, 20, run=2, lives=4, lives_max=5))
+    ru.CW.RenderRuns(True)
+    req = str(runs_ru["req"]["__text"])
+    other_run = str(ru_locale.text["|cffff4444You are on %s|r: %s."]) % (
+        str(ru.CW.challengesById[2].name), str(ru.CW.LivesLeftText(4, 5)))
+    ru.check(other_run in req and "You are on " not in req,
+             "ruRU names a different active challenge without English status text")
+    ru.recv(run_state(1, 1, run_ready=1))
+    ru.CW.RenderRuns(True)
+    req = str(runs_ru["req"]["__text"])
+    ru.check(str(ru_locale.text["|cff00ff00You can start this now.|r"]) in req,
+             "ruRU localizes the ready-to-start challenge state")
+    ru.recv(run_state(1, 20, run_ready=0))
+    ru.CW.RenderRuns(True)
+    req = str(runs_ru["req"]["__text"])
+    late = str(ru_locale.text["|cffff4444Challenge runs start before level %d.|r"]) % 5
+    ru.check(late in req and "Challenge runs start before" not in req,
+             "ruRU localizes the level deadline status")
+    ru.recv("RT|4|3|3|1|42|0|0|")
+    tracker_line = str(ru.CW.tracker["line"]["__text"])
+    hunter = str(ru_locale.text["|cffff4444The hunter is on you|r (level %d)"]) % 42
+    ru.check(tracker_line == hunter,
+             "ruRU localizes the live Pursued challenge status")
+    ru.recv("RT|1|3|5|2|38|500|0|")
+    tracker_line = str(ru.CW.tracker["line"]["__text"])
+    vengeance = str(ru_locale.text["Vengeance |cffffd100%d/%d|r  "]) % (38, 500)
+    nemeses = str(ru_locale.text["|cffff8800%d nemeses (few)|r"]) % 2
+    ru.check(vengeance + nemeses == tracker_line and "Vengeance" not in tracker_line,
+             "ruRU localizes the Nemesis tracker count and Vengeance status")
+    ru.recv("RT|15|3|5|600|3600|1|300|")
+    clock = str(ru_locale.text["%s  paused"]) % "10:00"
+    ru.check(str(ru.CW.tracker["bar"]["text"]["__text"]) == clock,
+             "ruRU localizes the paused Hourglass challenge clock")
+    ru.recv("CH|15|Nemesis|255|0|Rule text|0|0|0|")
+    ru.recv(run_state(1, 20, run=15, lives=255, lives_max=255, extra=1))
+    ru.CW.runFly.selected = 15
+    ru.CW.RenderRuns(True)
+    unlimited_text = str(ru.CW.runFly["livesText"]["__text"])
+    ru.check(unlimited_text == str(ru_locale.text[
+                 "|cffffffffUnlimited lives|r on this challenge. A death never ends the run, and the extra life you hold waits for your next run."]),
+             "ruRU translates unlimited lives and an extra life held for the next run")
+    ru.recv("NLB|")
+    ru.recv("NL|Rare Creature|Bloodsworn|Sworn|70|Bloodlust|Ironhide|Ashenvale|1|2")
+    ru.recv("NLE|")
+    nemesis = ru.CW.nemesisList[1]
+    ru.check(str(nemesis.name) == "Rare Creature" and
+             str(nemesis.title) == str(ru_locale.text["Bloodsworn"]) and
+             str(nemesis.kind) == str(ru_locale.text["Sworn"]),
+             "Nemesis labels translate while creature names remain intact")
+    ru.check(str(ru.g.TalentMicroButton.tooltipText).startswith(str(ru_locale.text["Pet Talents"])) and
+             str(ru.g.TalentMicroButton.newbieText) == str(ru_locale.text["Your tamed beast's talents. Your own are in Hero Advancement."]),
+             "the Pet Talents fallback and tooltip are localized")
+    help_currency = str(help_pages[2]["blocks"][1]["text"])
+    help_wildcard = str(help_pages[3]["blocks"][2]["text"])
+    ru.check("Ability Essence" not in help_currency and "Вероятность зависит от редкости" in help_wildcard,
+             "ruRU localizes dynamic currency and rarity paragraphs")
+    return en.failures + fallback.failures + ru.failures
+
+
+def test_cyrillic_build_text():
+    print("--- Cyrillic and mixed-script build text: save, reload, export, import, share")
+    h = Harness()
+    CW = h.CW
+    h.recv(state(0))
+
+    name_input = "Сборка: Mage, Frost"
+    desc_input = "Огонь|Frost: ближний;\n бой"
+    clean_name = str(CW.CleanBuildText(name_input, 32))
+    clean_desc = str(CW.CleanBuildText(desc_input, 120, True))
+    h.check(clean_name == "Сборка Mage Frost" and clean_desc == "ОгоньFrost: ближний; бой",
+            "mixed Russian and Latin text is cleaned while preserving supported punctuation")
+
+    # The limits are bytes in the wire format. A cap may not leave a partial
+    # UTF-8 codepoint at the end of a saved or exported string.
+    cap_name = str(CW.CleanBuildText("A" * 31 + "Я", 32))
+    cap_desc = str(CW.CleanBuildText("Я" * 59 + "AБ", 120, True))
+    exact_name = str(CW.CleanBuildText("Я" * 16, 32))
+    exact_desc = str(CW.CleanBuildText("Я" * 60, 120, True))
+    boundary_name = str(CW.CleanBuildText("Я" * 16 + "B", 32))
+    boundary_desc = str(CW.CleanBuildText("Я" * 60 + "B", 120, True))
+    h.check(cap_name == "A" * 31 and len(cap_name.encode("utf-8")) == 31 and
+            cap_desc == "Я" * 59 + "A" and len(cap_desc.encode("utf-8")) == 119 and
+            exact_name == "Я" * 16 and len(exact_name.encode("utf-8")) == 32 and
+            exact_desc == "Я" * 60 and len(exact_desc.encode("utf-8")) == 120 and
+            boundary_name == "Я" * 16 and len(boundary_name.encode("utf-8")) == 32 and
+            boundary_desc == "Я" * 60 and len(boundary_desc.encode("utf-8")) == 120,
+            "32/120 byte caps preserve complete Cyrillic codepoints at and across the boundary")
+
+    # Save through the editor handler, then load those values into a fresh
+    # addon runtime as if the character had logged in again.
+    h.CW.OpenBuildEditor(h.rt.eval("{ name = 'Draft', desc = '', abilities = { 1752 }, talents = {} }"), None)
+    E = CW.buildEditor
+    E.name.SetText(E.name, name_input)
+    E.desc.SetText(E.desc, desc_input)
+    E.verdictOk = True
+    h.click(E.save)
+    saved = CW.SavedBuilds()[1]
+    h.check(str(saved.name) == clean_name and str(saved.desc) == clean_desc,
+            "Save persists cleaned text: %r / %r (expected %r / %r)" %
+            (str(saved.name), str(saved.desc), clean_name, clean_desc))
+
+    reloaded = Harness()
+    reloaded.g.PERSISTED_NAME = str(saved.name)
+    reloaded.g.PERSISTED_DESC = str(saved.desc)
+    reloaded.rt.execute("ClasslessWildcardDB = { customBuilds = { { name = PERSISTED_NAME, desc = PERSISTED_DESC, abilities = { 1752 }, talents = {} } } }")
+    loaded = reloaded.CW.SavedBuilds()[1]
+    reloaded.check(str(loaded.name) == clean_name and str(loaded.desc) == clean_desc,
+                   "a fresh login runtime reads SavedVariables text unchanged")
+
+    # Share codes are ASCII base64 over UTF-8 bytes. Exercise both the import
+    # window and party piece framing across its 200-character boundary.
+    h.rt.globals().BUILD_NAME = clean_name
+    h.rt.globals().BUILD_DESC = clean_desc
+    h.rt.execute("SHARE_BUILD = { name = BUILD_NAME, desc = BUILD_DESC, abilities = { 1752 }, talents = {} }; SHARE_CODE = ClasslessWildcard_API.EncodeBuild(SHARE_BUILD); SHARE_ROUNDTRIP = ClasslessWildcard_API.DecodeBuild(SHARE_CODE)")
+    code = str(h.g.SHARE_CODE)
+    roundtrip = h.g.SHARE_ROUNDTRIP
+    h.check(code.startswith("CWA1:") and str(roundtrip.name) == clean_name and str(roundtrip.desc) == clean_desc,
+            "export and direct import preserve Russian and Latin text")
+
+    CW.OpenShareWindow("share", saved)
+    share_window = CW.shareWindow
+    h.check(str(share_window.box["__text"]) == str(CW.EncodeBuild(saved)),
+            "the Share window exports the saved user text as a code")
+    CW.OpenShareWindow("import")
+    share_window.box.SetText(share_window.box, code)
+    h.click(share_window.go)
+    h.check(E.build is not None and str(E.build.name) == clean_name and str(E.build.desc) == clean_desc,
+            "the Import window restores text: %r / %r" % (str(E.build.name), str(E.build.desc)))
+
+    long_desc = "Я" * 60
+    h.rt.globals().LONG_DESC = long_desc
+    h.rt.execute("LONG_CODE = ClasslessWildcard_API.EncodeBuild({ name = BUILD_NAME, desc = LONG_DESC, abilities = {}, talents = {} })")
+    long_code = str(h.g.LONG_CODE)
+    h.clear_sent()
+    CW.SendBuildToGroup(long_code)
+    pieces = h.sent()
+    h.check(len(pieces) > 1 and all(piece.startswith("%d/" % i) for i, piece in enumerate(pieces, 1)),
+            "party sharing splits a long Cyrillic build code into numbered pieces")
+    for piece in pieces:
+        h.events["__scripts"]["OnEvent"](h.events, "CHAT_MSG_ADDON", "CWSH", piece, "PARTY", "Friend")
+    received = h.g.LAST_POPUP_FRAME and h.g.LAST_POPUP_FRAME["data"]
+    h.check(received is not None and h.g.LAST_POPUP == "CW_CLASSLESS_SHAREDBUILD" and
+            str(received.name) == clean_name and str(received.desc) == long_desc,
+            "party pieces reconstruct text: popup=%r arg=%r" %
+            (h.g.LAST_POPUP, h.g.LAST_POPUP_FRAME and h.g.LAST_POPUP_FRAME["data"]))
+    return h.failures + reloaded.failures
+
+
 def main():
+    locale_failures = test_locale_selection()
     try:
         h = Harness()
     except Exception as e:  # a load-time error is a failure, not a crash
@@ -5180,8 +5572,10 @@ def main():
     test_dealt_hand(h)
     test_custom_builds(h)
     test_build_levels(h)
-    if h.failures:
-        print("\n%d check(s) FAILED" % h.failures)
+    locale_failures += test_cyrillic_build_text()
+    failures = h.failures + locale_failures
+    if failures:
+        print("\n%d check(s) FAILED" % failures)
         return 1
     print("\nall checks passed")
     return 0

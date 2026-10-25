@@ -208,6 +208,14 @@ namespace ClasslessWildcard
     // and the client carry this number for both lives and lives at the start.
     constexpr uint8 UNLIMITED_LIVES = 255;
 
+    struct ChallengeLocale
+    {
+        char const* name = nullptr;
+        char const* rule = nullptr;
+        char const* detail = nullptr;
+        char const* tips = nullptr;
+    };
+
     struct Challenge
     {
         uint8 id;
@@ -223,6 +231,7 @@ namespace ClasslessWildcard
         // The path a character must already walk to start it (a Mode value),
         // or Unchosen for either. A run never sets or changes a path.
         Mode path = Mode::Unchosen;
+        ChallengeLocale ruRU;
     };
     // Nemesis: a creature kind that has killed this Hero, how much it grew,
     // and the experience it took, which comes back when one of them dies.
@@ -285,6 +294,8 @@ namespace ClasslessWildcard
         uint32 id = 0;
         std::string name;
         std::string description;
+        std::string nameRu;
+        std::string descriptionRu;
         std::vector<uint32> abilities;                    // first-rank spell ids
         // talentId -> rank. A talent can be listed once per rank, each entry
         // for a higher rank than the one before it, so each rank has a level
@@ -798,7 +809,7 @@ namespace ClasslessWildcard
         uint32 npcEntry = 990100;
     };
 
-    char const* RarityName(Rarity r);
+    std::string RarityName(Rarity r, Player* player = nullptr);
     char const* RarityColor(Rarity r); // client color escape
 } // namespace ClasslessWildcard
 

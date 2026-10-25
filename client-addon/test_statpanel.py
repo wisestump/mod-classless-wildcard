@@ -66,7 +66,7 @@ def main():
     failures = 0
     for label, stats in CASES:
         rt = LuaRuntime(unpack_returned_tuples=True)
-        rt.execute("CW = { stats = {} }")
+        rt.execute("CW = { stats = {} }; CWText = function(text) return text end")
         for k, v in stats.items():
             rt.execute("CW.stats.%s = %s" % (k, "true" if v is True else
                                              "false" if v is False else v))

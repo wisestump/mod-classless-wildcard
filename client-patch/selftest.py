@@ -237,6 +237,39 @@ def main(argv):
             check("ChrClasses resolved", bool(raw), os.path.basename(source))
             check("all classes renamed", len(renamed) >= 10,
                   "%d records" % len(renamed))
+            if locale.lower() == "ruru":
+                localized, _ = dbc.rename_all_classes(raw, "Hero", "Герой")
+                localized_rows = struct.unpack_from("<4I", localized, 4)
+                localized_fields, localized_size = localized_rows[1], localized_rows[2]
+                localized_strings = dbc_strings(localized)
+                russian_names = []
+                for index in range(localized_rows[0]):
+                    row = struct.unpack_from("<%dI" % localized_fields,
+                                             localized, 20 + index * localized_size)
+                    russian_names.append(tuple(dbc.read_string(
+                        localized_strings, row[column])
+                        for column in (12, 29, 46)))
+                check("ruRU class name localized in general and gender columns",
+                      len(russian_names) >= 10 and
+                      all(names == ("Герой", "Герой", "Герой")
+                          for names in russian_names))
+                original_rows = struct.unpack_from("<4I", raw, 4)
+                original_fields, original_size = original_rows[1], original_rows[2]
+                original_strings = dbc_strings(raw)
+                preserved = []
+                for index in range(original_rows[0]):
+                    out_row = struct.unpack_from("<%dI" % localized_fields,
+                                                 localized, 20 + index * localized_size)
+                    preserved.append(
+                        dbc.read_string(localized_strings, out_row[4]) == "Hero"
+                        and dbc.read_string(localized_strings, out_row[21]) == "Hero"
+                        and dbc.read_string(localized_strings, out_row[38]) == "Hero"
+                        and dbc.read_string(localized_strings, out_row[55])
+                        == dbc.read_string(original_strings, struct.unpack_from(
+                            "<I", raw, 20 + index * original_size
+                            + dbc.CHRCLASSES_TOKEN_FIELD * 4)[0]))
+                check("ruRU class update preserves other locale columns and tokens",
+                      all(preserved))
 
             # Slot 17 is a relic slot for Paladin, DK, Shaman and Druid, and the
             # client draws nothing there -- which made every bow, gun and wand
@@ -1007,6 +1040,10 @@ def main(argv):
             check("unrelated strings untouched",
                   text.count("REALM_LIST") == new_text.count("REALM_LIST"))
             check("no key lost", len(text.splitlines()) == len(new_text.splitlines()))
+            russian_text, russian_replaced = gluestrings.rewrite(text, "Hero", "ruRU")
+            check("ruRU character creation copy translated",
+                  bool(russian_replaced) and "Каждый персонаж" in russian_text
+                  and "Герой" in russian_text)
 
             # --- CharacterCreate hide-class hook ----------------------------
             raw, source = files.find(CHARCREATE_LUA)

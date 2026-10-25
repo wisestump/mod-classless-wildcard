@@ -1,10 +1,15 @@
 ## Interface: 30300
 ## Title: Hero Advancement
 ## Notes: Abilities, talents, stats, Rebirth and challenge runs for your Hero. /cw to open.
+## Title-ruRU: Развитие героя
+## Notes-ruRU: Способности, таланты, характеристики, перерождение и испытания. /cw
 ## Author: Dustin Hendrickson
 ## Version: 1.0
 ## SavedVariables: ClasslessWildcardDB
 ## SavedVariablesPerCharacter: ClasslessWildcardCharDB
 
+Locales\enUS.lua
+Locales\ruRU.lua
+Locales.lua
 ClasslessWildcard.lua
 Bindings.xml

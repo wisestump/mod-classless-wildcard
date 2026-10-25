@@ -88,16 +88,28 @@ def check(label, ok, detail=""):
 
 # how many rules live in check_against_client, so a bare run can say what it
 # skipped. The check below keeps this honest if a rule is added or removed.
-CLIENT_RULES = 10
+CLIENT_RULES = 12
 
 
 def check_against_client(client_dir, doc):
     """Apply the rows to the client's own tables and read them back."""
-    from lib import clientfs, forged
+    from lib import clientfs, dbc, forged, locales
 
     print("\n-- against the client at %s" % client_dir)
     data = os.path.join(client_dir, "Data")
     locale = clientfs.detect_locales(data)[0]
+    if locale.lower() == "ruru":
+        catalog = locales.load_catalog()
+        locales.apply_ruRU(doc, catalog, "spells")
+        locales.apply_ruRU(doc, catalog, "titles")
+        line_name = catalog.get("skill_lines", {}).get(
+            str(doc.get("skill_line", {}).get("id", "")))
+        if line_name:
+            doc["skill_line"]["ruRU"] = line_name
+    else:
+        locales.clear_ruRU(doc, "spells")
+        locales.clear_ruRU(doc, "titles")
+        doc.get("skill_line", {}).pop("ruRU", None)
     # Read PRISTINE tables, the way install.py does. An installed patch archive
     # already holds forged rows, and the appenders skip an id they already have,
     # so reading our own output back as the source would test the last install
@@ -117,6 +129,18 @@ def check_against_client(client_dir, doc):
             body = raw[20:20 + count * rec]
             return count, rec, body
 
+        def text_at(path, row_index, column):
+            raw = payload[path]
+            count, _fields, rec, _ = dbc.parse_header(raw)
+            records_end = 20 + count * rec
+            row = raw[20 + row_index * rec:20 + (row_index + 1) * rec]
+            offset = struct.unpack_from("<I", row, column * 4)[0]
+            if not offset:
+                return ""
+            strings = raw[records_end:]
+            end = strings.find(b"\0", offset)
+            return strings[offset:end].decode("utf-8", "replace") if end >= 0 else ""
+
         # the Hero line
         count, rec, body = rows(forged.SKILLLINE, forged.SKILLLINE_FIELDS)
         line = doc["skill_line"]
@@ -131,6 +155,17 @@ def check_against_client(client_dir, doc):
         check("SkillLine.dbc: the Hero row lands with its category and icon", ok,
               "category %d must be 7 or the client will not draw it as a class tab"
               % line["category"])
+        line_row = found[0] if found else None
+        localized_line_ok = line_row is not None
+        if localized_line_ok:
+            localized_line_ok = (
+                text_at(forged.SKILLLINE, line_row, forged.SL_NAME_FIRST + forged.LOCALE_ENUS)
+                == line["name"]
+                and text_at(forged.SKILLLINE, line_row, forged.SL_NAME_FIRST + forged.LOCALE_RURU)
+                == line.get("ruRU", ""))
+        check("SkillLine.dbc: English and ruRU line names land in their own columns",
+              localized_line_ok,
+              "enUS=%r ruRU=%r" % (line["name"], line.get("ruRU", "")))
 
         # the titles: every manifest row on the client's table, with its bit
         count, rec, body = rows(forged.CHARTITLES, forged.CHARTITLES_FIELDS)
@@ -141,6 +176,27 @@ def check_against_client(client_dir, doc):
                    if on_client.get(t["id"]) != t["bit"]]
         check("CharTitles.dbc: every title lands with its bit", not missing,
               "%d title(s); missing or wrong bit: %s" % (len(doc.get("titles", [])), missing[:5]))
+        title_names_bad = []
+        title_rows = {struct.unpack_from("<I", body, i * rec)[0]: i for i in range(count)}
+        for title in doc.get("titles", []):
+            row_index = title_rows.get(title["id"])
+            if row_index is None:
+                title_names_bad.append("%d missing" % title["id"])
+                continue
+            russian = title.get("ruRU", {})
+            for label, column, expected in (
+                    ("enUS male", forged.CT_MALE_FIRST + forged.LOCALE_ENUS, title["name"]),
+                    ("enUS female", forged.CT_FEMALE_FIRST + forged.LOCALE_ENUS, title["name"]),
+                    ("ruRU male", forged.CT_MALE_FIRST + forged.LOCALE_RURU,
+                     russian.get("male", "")),
+                    ("ruRU female", forged.CT_FEMALE_FIRST + forged.LOCALE_RURU,
+                     russian.get("female", ""))):
+                actual = text_at(forged.CHARTITLES, row_index, column)
+                if actual != expected:
+                    title_names_bad.append("%d %s: %r != %r"
+                                           % (title["id"], label, actual, expected))
+        check("CharTitles.dbc: English and gendered ruRU names land in their own columns",
+              not title_names_bad, "; ".join(title_names_bad[:4]))
 
         # every spell row
         count, rec, body = rows(forged.SPELL, 234)
@@ -1762,8 +1818,14 @@ def main():
     # that table is in this checkout. "Bit_Index" was a guess from the DBC
     # layout; the core calls that column Mask_ID, and the realm's world update
     # stopped on it. Read the column header, every time.
-    core_dump = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, os.pardir,
-                             "data", "sql", "base", "db_world", "chartitles_dbc.sql")
+    core_roots = [os.environ.get("ACORE_PATH", ""),
+                  os.path.abspath(os.path.join(MODULE, os.pardir, "server")),
+                  os.path.abspath(os.path.join(MODULE, os.pardir, os.pardir))]
+    core_dump = next((os.path.join(root, "data", "sql", "base", "db_world",
+                                   "chartitles_dbc.sql")
+                      for root in core_roots if root and os.path.isfile(
+                          os.path.join(root, "data", "sql", "base", "db_world",
+                                       "chartitles_dbc.sql"))), "")
     col_bad = []
     if os.path.exists(core_dump):
         core_cols = re.findall(r"^\s+`([A-Za-z0-9_]+)` ", io.open(core_dump, encoding="utf-8").read(), re.M)

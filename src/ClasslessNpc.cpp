@@ -17,9 +17,11 @@
  */
 
 #include "Chat.h"
+#include "ClasslessLocale.h"
 #include "ClasslessMgr.h"
 #include "ClasslessVendorLists.h"
 #include "Creature.h"
+#include "DBCStores.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "ScriptedGossip.h"
@@ -71,49 +73,70 @@ namespace
     // the Hero talent tab carries in its ClassMask.
     constexpr uint8 HERO_PAGE = 12;
 
-    char const* ClassNameById(uint8 classId)
+    std::string ClassNameById(uint8 classId, Player* player)
     {
-        switch (classId)
+        if (classId == HERO_PAGE)
+            return "Hero";
+        if (ChrClassesEntry const* classEntry = sChrClassesStore.LookupEntry(classId))
         {
-            case CLASS_WARRIOR: return "Warrior";
-            case CLASS_PALADIN: return "Paladin";
-            case CLASS_HUNTER:  return "Hunter";
-            case CLASS_ROGUE:   return "Rogue";
-            case CLASS_PRIEST:  return "Priest";
-            case CLASS_DEATH_KNIGHT: return "Death Knight";
-            case CLASS_SHAMAN:  return "Shaman";
-            case CLASS_MAGE:    return "Mage";
-            case CLASS_WARLOCK: return "Warlock";
-            case CLASS_DRUID:   return "Druid";
-            case HERO_PAGE:     return "Hero";
-            default:            return "Unknown";
+            LocaleConstant locale = player->GetSession()->GetSessionDbcLocale();
+            char const* name = classEntry->name[locale];
+            if (!name || !*name)
+                name = classEntry->name[LOCALE_enUS];
+            if (name && *name)
+                return name;
         }
+        return LocaleText(player, "Unknown", "Неизвестно");
     }
 
     // TalentTab.dbc carries the tree names, but the core does not load them.
-    char const* TreeName(uint32 tabId)
+    std::string TreeName(uint32 tabId, Player* player)
     {
         switch (tabId)
         {
-            case 41:  return "Fire";          case 61:  return "Frost";         case 81:  return "Arcane";
-            case 161: return "Arms";          case 163: return "Protection";    case 164: return "Fury";
-            case 181: return "Combat";        case 182: return "Assassination"; case 183: return "Subtlety";
-            case 201: return "Discipline";    case 202: return "Holy";          case 203: return "Shadow";
-            case 261: return "Elemental";     case 262: return "Restoration";   case 263: return "Enhancement";
-            case 281: return "Feral Combat";  case 282: return "Restoration";   case 283: return "Balance";
-            case 301: return "Destruction";   case 302: return "Affliction";    case 303: return "Demonology";
-            case 361: return "Beast Mastery"; case 362: return "Survival";      case 363: return "Marksmanship";
-            case 381: return "Retribution";   case 382: return "Holy";          case 383: return "Protection";
-            case 398: return "Blood";         case 399: return "Frost";         case 400: return "Unholy";
-            default:  return nullptr;
+            case 41:  return LocaleText(player, "Fire", "Огонь");
+            case 61:  return LocaleText(player, "Frost", "Лед");
+            case 81:  return LocaleText(player, "Arcane", "Тайная магия");
+            case 161: return LocaleText(player, "Arms", "Оружие");
+            case 163: return LocaleText(player, "Protection", "Защита");
+            case 164: return LocaleText(player, "Fury", "Неистовство");
+            case 181: return LocaleText(player, "Combat", "Бой");
+            case 182: return LocaleText(player, "Assassination", "Ликвидация");
+            case 183: return LocaleText(player, "Subtlety", "Скрытность");
+            case 201: return LocaleText(player, "Discipline", "Послушание");
+            case 202: return LocaleText(player, "Holy", "Свет");
+            case 203: return LocaleText(player, "Shadow", "Тьма");
+            case 261: return LocaleText(player, "Elemental", "Стихии");
+            case 262: return LocaleText(player, "Restoration", "Исцеление");
+            case 263: return LocaleText(player, "Enhancement", "Совершенствование");
+            case 281: return LocaleText(player, "Feral Combat", "Сила зверя");
+            case 282: return LocaleText(player, "Restoration", "Исцеление");
+            case 283: return LocaleText(player, "Balance", "Баланс");
+            case 301: return LocaleText(player, "Destruction", "Разрушение");
+            case 302: return LocaleText(player, "Affliction", "Колдовство");
+            case 303: return LocaleText(player, "Demonology", "Демонология");
+            case 361: return LocaleText(player, "Beast Mastery", "Повелитель зверей");
+            case 362: return LocaleText(player, "Survival", "Выживание");
+            case 363: return LocaleText(player, "Marksmanship", "Стрельба");
+            case 381: return LocaleText(player, "Retribution", "Воздаяние");
+            case 382: return LocaleText(player, "Holy", "Свет");
+            case 383: return LocaleText(player, "Protection", "Защита");
+            case 398: return LocaleText(player, "Blood", "Кровь");
+            case 399: return LocaleText(player, "Frost", "Лед");
+            case 400: return LocaleText(player, "Unholy", "Нечестивость");
+            default:  return {};
         }
     }
 
-    std::string SpellNameOf(uint32 spellId)
+    std::string SpellNameOf(uint32 spellId, LocaleConstant locale)
     {
         if (SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId))
-            if (info->SpellName[0])
-                return info->SpellName[0];
+        {
+            if (info->SpellName[locale] && *info->SpellName[locale])
+                return info->SpellName[locale];
+            if (info->SpellName[LOCALE_enUS] && *info->SpellName[LOCALE_enUS])
+                return info->SpellName[LOCALE_enUS];
+        }
         return Acore::StringFormat("Spell {}", spellId);
     }
 
@@ -125,31 +148,39 @@ namespace
 
         if (st.mode == Mode::Unchosen)
         {
-            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, "|cff00ccffChoose the Classless path|r (pick every ability yourself)",
+            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, LocaleText(player,
+                "|cff00ccffChoose the Classless path|r (pick every ability yourself)",
+                "|cff00ccffВыбрать свободный путь|r (вы сами выбираете все способности)"),
                 GOSSIP_SENDER_MAIN, ACT_MODE_CLASSLESS,
-                "Walk the Classless path? This character keeps it for good.", 0, false);
-            AddGossipItemFor(player, GOSSIP_ICON_BATTLE, "|cffff8800Choose the Wildcard path|r (random abilities, reroll what you dislike)",
+                LocaleText(player, "Walk the Classless path? This character keeps it for good.",
+                    "Выбрать свободный путь? Решение нельзя будет изменить."), 0, false);
+            AddGossipItemFor(player, GOSSIP_ICON_BATTLE, LocaleText(player,
+                "|cffff8800Choose the Wildcard path|r (random abilities, reroll what you dislike)",
+                "|cffff8800Выбрать случайный путь|r (случайные способности можно перебросить)"),
                 GOSSIP_SENDER_MAIN, ACT_MODE_WILDCARD,
-                "Walk the Wildcard path? This character keeps it for good.", 0, false);
+                LocaleText(player, "Walk the Wildcard path? This character keeps it for good.",
+                    "Выбрать случайный путь? Решение нельзя будет изменить."), 0, false);
         }
         else if (st.mode == Mode::Classless)
         {
-            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, Acore::StringFormat("Browse abilities by class  |cff00ff00[{} AE]|r", st.abilityEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_CLASSES);
-            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, Acore::StringFormat("Browse talents  |cff00ff00[{} TE]|r", st.talentEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_TALENTS);
+            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, Acore::StringFormat(LocaleText(player,
+                "Browse abilities by class  |cff00ff00[{} AE]|r", "Способности по классам  |cff00ff00[{} СС]|r"), st.abilityEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_CLASSES);
+            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, Acore::StringFormat(LocaleText(player,
+                "Browse talents  |cff00ff00[{} TE]|r", "Таланты  |cff00ff00[{} СТ]|r"), st.talentEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_TALENTS);
             // The old "learn by spell ID" entries are gone: a coded gossip
             // option opens the client's generic ENTER_CODE popup, which ignores
             // the prompt we set and expects a raw spell id nobody has to hand.
             // Browsing by class does the same job by clicking, and
             // ".classless learn <id>" still covers entering one directly.
-            AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1, "My abilities (unlearn)", GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG);
+            AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1, LocaleText(player, "My abilities (unlearn)", "Мои способности (забыть)"), GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG);
             if (!sClasslessMgr->Archetypes().empty())
-                AddGossipItemFor(player, GOSSIP_ICON_TABARD, "Apply a starter archetype...", GOSSIP_SENDER_MAIN, ACT_ARCHETYPES);
-            AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1, "Unlearn everything (free)", GOSSIP_SENDER_MAIN, ACT_RESPEC);
+                AddGossipItemFor(player, GOSSIP_ICON_TABARD, LocaleText(player, "Apply a starter archetype...", "Выбрать готовый архетип..."), GOSSIP_SENDER_MAIN, ACT_ARCHETYPES);
+            AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1, LocaleText(player, "Unlearn everything (free)", "Забыть всё (бесплатно)"), GOSSIP_SENDER_MAIN, ACT_RESPEC);
         }
         else // Wildcard
         {
-            AddGossipItemFor(player, GOSSIP_ICON_BATTLE, "My rolled abilities (reroll / lock)", GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG);
-            AddGossipItemFor(player, GOSSIP_ICON_BATTLE, "My rolled talents (reroll)", GOSSIP_SENDER_MAIN, BASE_MY_TALENTS_PG);
+            AddGossipItemFor(player, GOSSIP_ICON_BATTLE, LocaleText(player, "My rolled abilities (reroll / lock)", "Мои способности (перебросить / закрепить)"), GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG);
+            AddGossipItemFor(player, GOSSIP_ICON_BATTLE, LocaleText(player, "My rolled talents (reroll)", "Мои таланты (перебросить)"), GOSSIP_SENDER_MAIN, BASE_MY_TALENTS_PG);
         }
 
         // The vendor is for EVERY Hero, not just Wildcard ones: it carries the
@@ -157,15 +188,16 @@ namespace
         // and a Classless Hero could not reach any of it before.
         if (st.mode != Mode::Unchosen)
             AddGossipItemFor(player, GOSSIP_ICON_VENDOR, st.mode == Mode::Wildcard
-                                 ? "Browse the Hero's wares (gear, heirlooms, Reroll Scrolls)..."
-                                 : "Browse the Hero's wares (gear and heirlooms)...",
+                                 ? LocaleText(player, "Browse the Hero's wares (gear, heirlooms, Reroll Scrolls)...", "Товары героя (снаряжение, фамильные вещи, свитки переброса)...")
+                                 : LocaleText(player, "Browse the Hero's wares (gear and heirlooms)...", "Товары героя (снаряжение и фамильные вещи)..."),
                              GOSSIP_SENDER_MAIN, ACT_VENDOR);
 
         // Rebirth picks heirlooms, which a gossip menu cannot do, so at the
         // cap the menu says where to go.
         if (cfg.rebirthEnable && sClasslessMgr->RebirthEligible(player))
             AddGossipItemFor(player, GOSSIP_ICON_CHAT,
-                "Rebirth into a new life at level 1 is done from the Hero Advancement panel (/cw).",
+                LocaleText(player, "Rebirth into a new life at level 1 is done from the Hero Advancement panel (/cw).",
+                    "Перерождение с возвращением на 1-й уровень доступно в панели развития героя (/cw)."),
                 GOSSIP_SENDER_MAIN, ACT_MAIN);
 
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
@@ -186,6 +218,23 @@ namespace
             if (l.category == category && l.whole)
                 return l.count;
         return 0;
+    }
+
+    std::string VendorCategoryName(Player* player, uint8 category)
+    {
+        VendorCategory const& c = VENDOR_CATEGORIES[category];
+        return IsRussian(player) ? c.nameRu : c.name;
+    }
+
+    std::string VendorCategoryBlurb(Player* player, uint8 category)
+    {
+        VendorCategory const& c = VENDOR_CATEGORIES[category];
+        return IsRussian(player) ? c.blurbRu : c.blurb;
+    }
+
+    std::string VendorListLabel(Player* player, VendorList const& list)
+    {
+        return IsRussian(player) ? list.labelRu : list.label;
     }
 
     uint32 ListsInCategory(uint8 category)
@@ -218,7 +267,7 @@ namespace
         for (uint8 c = 0; c < uint8(std::size(VENDOR_CATEGORIES)); ++c)
             AddGossipItemFor(player, GOSSIP_ICON_VENDOR,
                 Acore::StringFormat("{}  |cff888888{} ({} items)|r",
-                    VENDOR_CATEGORIES[c].name, VENDOR_CATEGORIES[c].blurb, CategoryTotal(c)),
+                    VendorCategoryName(player, c), VendorCategoryBlurb(player, c), CategoryTotal(c)),
                 GOSSIP_SENDER_MAIN, BASE_VENDOR_CATEGORY + c);
 
         // Reroll Scrolls sell here at the same level-scaled price as the
@@ -236,10 +285,11 @@ namespace
             if (price.empty())
                 price = Acore::StringFormat("{}c", cost);
             AddGossipItemFor(player, GOSSIP_ICON_MONEY_BAG,
-                Acore::StringFormat("Buy a Reroll Scroll  |cffffd100{}|r", price),
+                Acore::StringFormat(LocaleText(player, "Buy a Reroll Scroll  |cffffd100{}|r",
+                    "Купить свиток переброса  |cffffd100{}|r"), price),
                 GOSSIP_SENDER_MAIN, ACT_VENDOR_SUPPLIES);
         }
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"), GOSSIP_SENDER_MAIN, ACT_MAIN);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -252,10 +302,11 @@ namespace
             if (l.category != category || !l.count)
                 continue;
             AddGossipItemFor(player, l.whole ? GOSSIP_ICON_MONEY_BAG : GOSSIP_ICON_VENDOR,
-                Acore::StringFormat("{}  |cff888888({} items)|r", l.label, l.count),
+                Acore::StringFormat(LocaleText(player, "{}  |cff888888({} items)|r", "{}  |cff888888({} предметов)|r"),
+                    VendorListLabel(player, l), l.count),
                 GOSSIP_SENDER_MAIN, BASE_VENDOR_LIST + i);
         }
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back to the wares", GOSSIP_SENDER_MAIN, ACT_VENDOR);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back to the wares", "<- Назад к товарам"), GOSSIP_SENDER_MAIN, ACT_VENDOR);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -267,17 +318,23 @@ namespace
         {
             uint32 const ranks = arch.TalentRanks();
             AddGossipItemFor(player, GOSSIP_ICON_TABARD,
-                Acore::StringFormat("{}|cffffff00{}|r: {} ({} abilities, {} talent ranks, level 1 to 80)",
-                    following == id ? "[following] " : "", arch.name, arch.description,
+                Acore::StringFormat(LocaleText(player,
+                    "{}|cffffff00{}|r: {} ({} abilities, {} talent ranks, level 1 to 80)",
+                    "{}|cffffff00{}|r: {} (способностей: {}, рангов талантов: {}, уровни 1–80)"),
+                    following == id ? LocaleText(player, "[following] ", "[выбран] ") : "",
+                    sClasslessMgr->ArchetypeName(id, player), sClasslessMgr->ArchetypeDescription(id, player),
                     uint32(arch.abilities.size()), ranks),
                 GOSSIP_SENDER_MAIN, BASE_ARCHETYPE + id,
-                Acore::StringFormat("Follow the {} archetype? It replaces your build: abilities are unlearned and refunded, "
+                Acore::StringFormat(LocaleText(player,
+                    "Follow the {} archetype? It replaces your build: abilities are unlearned and refunded, "
                     "and your talents are reset with them. Its abilities and talents are then bought for you "
-                    "as you level.", arch.name), 0, false);
+                    "as you level.",
+                    "Выбрать архетип {}? Он заменит вашу сборку: способности будут забыты, а их стоимость возвращена; таланты сбросятся. По мере повышения уровня способности и таланты архетипа будут приобретаться автоматически."),
+                    sClasslessMgr->ArchetypeName(id, player)), 0, false);
         }
         if (following)
-            AddGossipItemFor(player, GOSSIP_ICON_TALK, "Stop following my archetype", GOSSIP_SENDER_MAIN, BASE_ARCHETYPE);
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+            AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "Stop following my archetype", "Отказаться от архетипа"), GOSSIP_SENDER_MAIN, BASE_ARCHETYPE);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"), GOSSIP_SENDER_MAIN, ACT_MAIN);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -290,13 +347,13 @@ namespace
                 continue;
             if (classId == CLASS_DEATH_KNIGHT && !sClasslessMgr->cfg.includeDeathKnight)
                 continue;
-            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, ClassNameById(classId), GOSSIP_SENDER_MAIN,
+            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, ClassNameById(classId, player), GOSSIP_SENDER_MAIN,
                 BASE_CLASS_PAGE + uint32(classId) * 100000);
         }
         if (sClasslessMgr->cfg.forgedEnable)
-            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, ClassNameById(HERO_PAGE), GOSSIP_SENDER_MAIN,
+            AddGossipItemFor(player, GOSSIP_ICON_TRAINER, ClassNameById(HERO_PAGE, player), GOSSIP_SENDER_MAIN,
                 BASE_CLASS_PAGE + uint32(HERO_PAGE) * 100000);
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"), GOSSIP_SENDER_MAIN, ACT_MAIN);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -364,19 +421,20 @@ namespace
             uint32 unlock = e->rankLevels.empty() ? 1u : uint32(e->rankLevels[0]);
             bool tooHigh = sClasslessMgr->cfg.respectLevelReqs && unlock > player->GetLevel();
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER,
-                Acore::StringFormat("{}{}|r  [{} AE]  {}Lv {}|r{}", RarityColor(e->rarity), SpellNameOf(e->firstSpellId),
+                Acore::StringFormat("{}{}|r  [{} AE]  {}Lv {}|r{}", RarityColor(e->rarity),
+                    SpellNameOf(e->firstSpellId, player->GetSession()->GetSessionDbcLocale()),
                     sClasslessMgr->AbilityCost(*e), tooHigh ? "|cffff4444" : "|cff888888", unlock,
-                    e->passive ? " (passive)" : ""),
+                    e->passive ? LocaleText(player, " (passive)", " (пассивная)") : ""),
                 GOSSIP_SENDER_MAIN, BASE_LEARN_ABILITY + e->firstSpellId);
         }
 
         if (start + PAGE_SIZE < list.size())
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Next page ->", GOSSIP_SENDER_MAIN,
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "Next page ->", "Следующая страница ->"), GOSSIP_SENDER_MAIN,
                 BASE_CLASS_PAGE + uint32(classId) * 100000 + page + 1);
         if (page > 0)
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "<- Previous page", GOSSIP_SENDER_MAIN,
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "<- Previous page", "<- Предыдущая страница"), GOSSIP_SENDER_MAIN,
                 BASE_CLASS_PAGE + uint32(classId) * 100000 + page - 1);
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back to classes", GOSSIP_SENDER_MAIN, ACT_BROWSE_CLASSES);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back to classes", "<- Назад к классам"), GOSSIP_SENDER_MAIN, ACT_BROWSE_CLASSES);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -394,14 +452,14 @@ namespace
             uint8 classId = HERO_PAGE;
             for (uint8 c = 1; c <= 11; ++c)
                 if (info.first & (1u << (c - 1))) { classId = c; break; }
-            char const* tree = TreeName(tabId);
+            std::string tree = TreeName(tabId, player);
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER,
                 classId == HERO_PAGE ? std::string("Hero")
-                    : tree ? Acore::StringFormat("{}: {}", ClassNameById(classId), tree)
-                           : Acore::StringFormat("{} talents", ClassNameById(classId)),
+                    : !tree.empty() ? Acore::StringFormat("{}: {}", ClassNameById(classId, player), tree)
+                           : Acore::StringFormat(LocaleText(player, "{} talents", "Таланты: {}"), ClassNameById(classId, player)),
                 GOSSIP_SENDER_MAIN, BASE_TALENT_TAB + tabId * 1000);
         }
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"), GOSSIP_SENDER_MAIN, ACT_MAIN);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -425,24 +483,27 @@ namespace
             bool const tooHigh = cfg.respectLevelReqs && unlock > player->GetLevel();
             std::string price;
             if (owned >= t->maxRank)
-                price = "|cff888888maxed|r";
+                price = LocaleText(player, "|cff888888maxed|r", "|cff888888максимум|r");
             else
             {
                 uint32 const cost = (cfg.talentFlatCost && owned > 0) ? 0 : cfg.talentCostPerRank;
-                price = cost ? Acore::StringFormat("[{} TE]", cost) : std::string("[free]");
+                price = cost ? Acore::StringFormat(LocaleText(player, "[{} TE]", "[{} СТ]"), cost)
+                    : LocaleText(player, "[free]", "[бесплатно]");
             }
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER,
-                Acore::StringFormat("{}{}|r  [{}/{}]  {}  {}Tier {}, Lv {}|r", RarityColor(t->rarity),
-                    SpellNameOf(t->rankSpells[0]), owned, t->maxRank, price,
+                Acore::StringFormat(LocaleText(player, "{}{}|r  [{}/{}]  {}  {}Tier {}, Lv {}|r",
+                    "{}{}|r  [{}/{}]  {}  {}Уровень таланта {}, ур. {}|r"), RarityColor(t->rarity),
+                    SpellNameOf(t->rankSpells[0], player->GetSession()->GetSessionDbcLocale()),
+                    owned, t->maxRank, price,
                     tooHigh ? "|cffff4444" : "|cff888888", t->row + 1, unlock),
                 GOSSIP_SENDER_MAIN, BASE_LEARN_TALENT + t->talentId);
         }
 
         if (start + PAGE_SIZE < list.size())
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Next page ->", GOSSIP_SENDER_MAIN, BASE_TALENT_TAB + tabId * 1000 + page + 1);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "Next page ->", "Следующая страница ->"), GOSSIP_SENDER_MAIN, BASE_TALENT_TAB + tabId * 1000 + page + 1);
         if (page > 0)
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "<- Previous page", GOSSIP_SENDER_MAIN, BASE_TALENT_TAB + tabId * 1000 + page - 1);
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back to trees", GOSSIP_SENDER_MAIN, ACT_BROWSE_TALENTS);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "<- Previous page", "<- Предыдущая страница"), GOSSIP_SENDER_MAIN, BASE_TALENT_TAB + tabId * 1000 + page - 1);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back to trees", "<- Назад к веткам талантов"), GOSSIP_SENDER_MAIN, ACT_BROWSE_TALENTS);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -466,7 +527,8 @@ namespace
             OwnedAbility const& o = st.abilities[firstSpell];
             bool locked = o.locked;
             std::string label = Acore::StringFormat("{}{}|r{}", e ? RarityColor(e->rarity) : "|cffffffff",
-                SpellNameOf(firstSpell), locked ? " |cffffff00[locked]|r" : "");
+                SpellNameOf(firstSpell, player->GetSession()->GetSessionDbcLocale()),
+                locked ? LocaleText(player, " |cffffff00[locked]|r", " |cffffff00[закреплена]|r") : "");
 
             // Free extras have nothing to offer here: they cost nothing, so
             // there is no essence to refund, and they cannot be rerolled or
@@ -477,36 +539,46 @@ namespace
             {
                 AddGossipItemFor(player, GOSSIP_ICON_CHAT,
                     Acore::StringFormat("{}  |cff888888({})|r", label,
-                        o.source == GrantSource::Companion ? "came free with another ability"
-                        : o.source == GrantSource::Talent  ? "came with a talent"
-                                                           : "heirloom, kept through Rebirth"),
+                        o.source == GrantSource::Companion
+                            ? LocaleText(player, "came free with another ability", "получена вместе с другой способностью")
+                        : o.source == GrantSource::Talent
+                            ? LocaleText(player, "came with a talent", "получена вместе с талантом")
+                            : LocaleText(player, "heirloom, kept through Rebirth", "унаследованная способность, сохраняется при перерождении")),
                     GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG + page);
                 continue;
             }
 
             if (wildcard)
             {
-                AddGossipItemFor(player, GOSSIP_ICON_BATTLE, Acore::StringFormat("Reroll: {}", label),
+                AddGossipItemFor(player, GOSSIP_ICON_BATTLE,
+                    Acore::StringFormat(LocaleText(player, "Reroll: {}", "Перебросить: {}"), label),
                     GOSSIP_SENDER_MAIN, BASE_ABILITY_ACTION + firstSpell,
-                    Acore::StringFormat("Reroll this ability? Free below level {}. After that it uses a reroll charge, "
-                        "or a Reroll Scroll when you have no charges left.", sClasslessMgr->cfg.wcFreeRerollLevel), 0, false);
+                    Acore::StringFormat(LocaleText(player,
+                        "Reroll this ability? Free below level {}. After that it uses a reroll charge, "
+                        "or a Reroll Scroll when you have no charges left.",
+                        "Перебросить эту способность? До {} уровня это бесплатно. Затем потребуется заряд переброса или свиток, если зарядов не осталось."),
+                        sClasslessMgr->cfg.wcFreeRerollLevel), 0, false);
                 // A padlock is only worth offering while the starting hand's
                 // reroll-everything pass can still take the card.
                 if (locked || player->GetLevel() < sClasslessMgr->cfg.wcFreeRerollLevel)
-                    AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1, Acore::StringFormat("{}: {}", locked ? "Unlock" : "Lock", label),
+                    AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1,
+                        Acore::StringFormat("{}: {}", locked ? LocaleText(player, "Unlock", "Открепить")
+                            : LocaleText(player, "Lock", "Закрепить"), label),
                         GOSSIP_SENDER_MAIN, BASE_LOCK_ABILITY + firstSpell);
             }
             else
-                AddGossipItemFor(player, GOSSIP_ICON_MONEY_BAG, Acore::StringFormat("Unlearn: {}", label),
+                AddGossipItemFor(player, GOSSIP_ICON_MONEY_BAG,
+                    Acore::StringFormat(LocaleText(player, "Unlearn: {}", "Забыть: {}"), label),
                     GOSSIP_SENDER_MAIN, BASE_ABILITY_ACTION + firstSpell,
-                    "Unlearn this ability and refund its essence?", 0, false);
+                    LocaleText(player, "Unlearn this ability and refund its essence?",
+                        "Забыть эту способность и вернуть потраченную эссенцию?"), 0, false);
         }
 
         if (start + PAGE_SIZE < owned.size())
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Next page ->", GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG + page + 1);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "Next page ->", "Следующая страница ->"), GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG + page + 1);
         if (page > 0)
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "<- Previous page", GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG + page - 1);
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "<- Previous page", "<- Предыдущая страница"), GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG + page - 1);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"), GOSSIP_SENDER_MAIN, ACT_MAIN);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -527,10 +599,14 @@ namespace
             if (!t)
                 continue;
             AddGossipItemFor(player, GOSSIP_ICON_BATTLE,
-                Acore::StringFormat("Reroll: {}{}|r [{}/{}]", RarityColor(t->rarity), SpellNameOf(t->rankSpells[0]), rank, t->maxRank),
+                Acore::StringFormat(LocaleText(player, "Reroll: {}{}|r [{}/{}]", "Перебросить: {}{}|r [{}/{}]"),
+                    RarityColor(t->rarity),
+                    SpellNameOf(t->rankSpells[0], player->GetSession()->GetSessionDbcLocale()), rank, t->maxRank),
                 GOSSIP_SENDER_MAIN, BASE_REROLL_TALENT + talentId,
-                Acore::StringFormat("Reroll this talent? It is replaced by one new random talent. Free below level {}. "
+                Acore::StringFormat(LocaleText(player,
+                    "Reroll this talent? It is replaced by one new random talent. Free below level {}. "
                     "After that it uses a reroll charge, or a Reroll Scroll when you have no charges left.",
+                    "Перебросить этот талант и заменить новым случайным? До {} уровня это бесплатно. Затем потребуется заряд переброса или свиток, если зарядов не осталось."),
                     sClasslessMgr->cfg.wcFreeRerollLevel), 0, false);
 
             // and the same reroll with a scroll staked on keeping it instead
@@ -539,18 +615,21 @@ namespace
             {
                 uint32 const odds = std::min<uint32>(100, sClasslessMgr->cfg.wcTalentUpgradeBase + per);
                 AddGossipItemFor(player, GOSSIP_ICON_MONEY_BAG,
-                    Acore::StringFormat("   ...and stake a Reroll Scroll on its rank ({}%)", odds),
+                    Acore::StringFormat(LocaleText(player, "   ...and stake a Reroll Scroll on its rank ({}%)",
+                        "   ...и поставить свиток на повышение ранга ({}%)"), odds),
                     GOSSIP_SENDER_MAIN, BASE_TALENT_DEEPEN + talentId,
-                    Acore::StringFormat("Spend one extra Reroll Scroll for a {}% chance to KEEP this talent and raise its rank instead? If it fails, the talent is replaced as normal.", odds),
+                    Acore::StringFormat(LocaleText(player,
+                        "Spend one extra Reroll Scroll for a {}% chance to KEEP this talent and raise its rank instead? If it fails, the talent is replaced as normal.",
+                        "Потратить дополнительный свиток переброса с шансом {}% сохранить этот талант и повысить его ранг? При неудаче талант заменится как обычно."), odds),
                     0, false);
             }
         }
 
         if (start + PAGE_SIZE < owned.size())
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Next page ->", GOSSIP_SENDER_MAIN, BASE_MY_TALENTS_PG + page + 1);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "Next page ->", "Следующая страница ->"), GOSSIP_SENDER_MAIN, BASE_MY_TALENTS_PG + page + 1);
         if (page > 0)
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "<- Previous page", GOSSIP_SENDER_MAIN, BASE_MY_TALENTS_PG + page - 1);
-        AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, LocaleText(player, "<- Previous page", "<- Предыдущая страница"), GOSSIP_SENDER_MAIN, BASE_MY_TALENTS_PG + page - 1);
+        AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"), GOSSIP_SENDER_MAIN, ACT_MAIN);
         SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
     }
 
@@ -599,7 +678,7 @@ public:
         {
             uint32 const page = OwnedTalentPage(player, action - BASE_TALENT_DEEPEN);
             if (!sClasslessMgr->Reroll(player, true, action - BASE_TALENT_DEEPEN, &err, 1) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             ShowMyTalents(player, creature, page);
         }
         else if (action >= BASE_MY_TALENTS_PG)
@@ -608,14 +687,14 @@ public:
         {
             uint32 const page = OwnedTalentPage(player, action - BASE_REROLL_TALENT);
             if (!sClasslessMgr->Reroll(player, true, action - BASE_REROLL_TALENT, &err) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             ShowMyTalents(player, creature, page);
         }
         else if (action >= BASE_LOCK_ABILITY)
         {
             // 4.7: a refused padlock says why
             if (!sClasslessMgr->ToggleLock(player, action - BASE_LOCK_ABILITY, &err) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             ShowMyAbilities(player, creature, OwnedAbilityPage(player, action - BASE_LOCK_ABILITY));
         }
         else if (action >= BASE_MY_ABILITIES_PG)
@@ -623,7 +702,7 @@ public:
         else if (action >= BASE_LEARN_TALENT)
         {
             if (!sClasslessMgr->BuyTalentRank(player, action - BASE_LEARN_TALENT, &err) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             // stay on the same tab
             if (TalentPoolEntry const* t = sClasslessMgr->GetTalent(action - BASE_LEARN_TALENT))
             {
@@ -646,10 +725,10 @@ public:
             if (sClasslessMgr->GetState(player).mode == Mode::Wildcard)
             {
                 if (!sClasslessMgr->Reroll(player, false, firstSpell, &err) && !err.empty())
-                    ChatHandler(player->GetSession()).SendSysMessage(err);
+                    ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             }
             else if (!sClasslessMgr->UnlearnAbility(player, firstSpell, &err) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             ShowMyAbilities(player, creature, page);
         }
         else if (action >= BASE_LEARN_ABILITY)
@@ -665,7 +744,7 @@ public:
                 page = uint32(std::find(list.begin(), list.end(), e) - list.begin()) / PAGE_SIZE;
             }
             if (!sClasslessMgr->BuyAbility(player, firstSpell, &err) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             if (e)
                 ShowClassAbilities(player, creature, classId, page);
             else
@@ -679,7 +758,7 @@ public:
         else if (action >= BASE_ARCHETYPE)
         {
             if (!sClasslessMgr->ApplyArchetype(player, action - BASE_ARCHETYPE, &err) && !err.empty())
-                ChatHandler(player->GetSession()).SendSysMessage(err);
+                ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
             ShowMain(player, creature);
         }
         else if (action >= BASE_VENDOR_LIST && action < BASE_VENDOR_LIST + std::size(VENDOR_LISTS))
@@ -698,12 +777,12 @@ public:
         {
             case ACT_MODE_CLASSLESS:
                 sClasslessMgr->SetMode(player, Mode::Classless, &err);
-                if (!err.empty()) ChatHandler(player->GetSession()).SendSysMessage(err);
+                if (!err.empty()) ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
                 ShowMain(player, creature);
                 break;
             case ACT_MODE_WILDCARD:
                 sClasslessMgr->SetMode(player, Mode::Wildcard, &err);
-                if (!err.empty()) ChatHandler(player->GetSession()).SendSysMessage(err);
+                if (!err.empty()) ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
                 ShowMain(player, creature);
                 break;
             case ACT_BROWSE_CLASSES:
@@ -715,14 +794,16 @@ public:
             case ACT_RESPEC:
                 ClearGossipMenuFor(player);
                 AddGossipItemFor(player, GOSSIP_ICON_INTERACT_1,
-                    "|cffff0000Confirm|r: unlearn every ability and talent, essence refunded",
+                    LocaleText(player, "|cffff0000Confirm|r: unlearn every ability and talent, essence refunded",
+                        "|cffff0000Подтвердить|r: забыть все способности и таланты и вернуть эссенцию"),
                     GOSSIP_SENDER_MAIN, ACT_RESPEC_CONFIRM);
-                AddGossipItemFor(player, GOSSIP_ICON_TALK, "<- Back", GOSSIP_SENDER_MAIN, ACT_MAIN);
+                AddGossipItemFor(player, GOSSIP_ICON_TALK, LocaleText(player, "<- Back", "<- Назад"),
+                    GOSSIP_SENDER_MAIN, ACT_MAIN);
                 SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
                 break;
             case ACT_RESPEC_CONFIRM:
                 if (!sClasslessMgr->Respec(player, &err) && !err.empty())
-                    ChatHandler(player->GetSession()).SendSysMessage(err);
+                    ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
                 ShowMain(player, creature);
                 break;
             case ACT_ARCHETYPES:
@@ -733,7 +814,7 @@ public:
                 break;
             case ACT_VENDOR_SUPPLIES:
                 if (!sClasslessMgr->BuyScroll(player, &err) && !err.empty())
-                    ChatHandler(player->GetSession()).SendSysMessage(err);
+                    ChatHandler(player->GetSession()).SendSysMessage(LocaleError(player, err));
                 ShowVendorMenu(player, creature);
                 break;
             case ACT_MAIN:

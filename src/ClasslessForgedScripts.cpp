@@ -30,6 +30,7 @@
  */
 
 #include "ClasslessMgr.h"
+#include "ClasslessLocale.h"
 #include "Duration.h"      // the 1ms the Weave refund is scheduled by
 #include "GameTime.h"
 #include "Chat.h"           // Last Breath says it fired
@@ -1535,7 +1536,9 @@ class spell_cw_last_breath : public AuraScript
         // slot 2 is the cooldown, in seconds
         player->AddSpellCooldown(buff, 0, uint32(std::max<int32>(0, GetSpellInfo()->Effects[EFFECT_1].CalcValue(player)))
                                           * IN_MILLISECONDS);
-        ChatHandler(player->GetSession()).SendSysMessage("|cffff8800Last Breath|r: you refuse to fall.");
+        ChatHandler(player->GetSession()).SendSysMessage(LocaleText(player,
+            "|cffff8800Last Breath|r: you refuse to fall.",
+            "|cffff8800Последний вздох|r: вы отказываетесь пасть."));
     }
 
     void Register() override

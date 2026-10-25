@@ -51,6 +51,8 @@ FLOAT_FIELDS = {47} | set(range(77, 80)) | set(range(101, 104)) \
     | set(range(119, 122)) | set(range(216, 219)) | set(range(229, 232))
 # (first locale column, mask column) for name, rank, description, tooltip
 LOCALE_BLOCKS = ((136, 152), (153, 169), (170, 186), (187, 203))
+LOCALE_ENUS = 0
+LOCALE_RURU = 8
 
 
 class ElementalError(ValueError):
@@ -100,6 +102,18 @@ def _add_string(strings: bytearray, text: str) -> int:
     return off
 
 
+def _set_string(strings: bytearray, row: bytearray, column: int, text: str) -> None:
+    """Point one text field at text, reusing its current string when possible."""
+    if text:
+        old_offset = struct.unpack_from("<I", row, column * 4)[0]
+        if old_offset < len(strings) and dbc.read_string(bytes(strings), old_offset) == text:
+            return
+        offset = _add_string(strings, text)
+    else:
+        offset = 0
+    struct.pack_into("<I", row, column * 4, offset)
+
+
 # ----------------------------------------------------------------- appenders
 
 def append_spells(data: bytes, variants):
@@ -108,13 +122,19 @@ def append_spells(data: bytes, variants):
     ids = _ids(records, rec, count)
     added, missing = 0, []
     for v in variants:
-        if v["id"] in ids:
-            continue
-        base_row = ids.get(v["base"])
-        if base_row is None:
-            missing.append(v["base"])
-            continue
-        row = bytearray(records[base_row * rec:(base_row + 1) * rec])
+        exists = v["id"] in ids
+        row_index = ids.get(v["id"])
+        if exists:
+            row = bytearray(records[row_index * rec:(row_index + 1) * rec])
+        else:
+            base_row = ids.get(v["base"])
+            if base_row is None:
+                missing.append(v["base"])
+                continue
+            row = bytearray(records[base_row * rec:(base_row + 1) * rec])
+            for first, mask in LOCALE_BLOCKS:
+                for column in range(first, mask):
+                    struct.pack_into("<I", row, column * 4, 0)
         for key, value in v["fields"].items():
             idx = int(key)
             if idx in FLOAT_FIELDS:
@@ -123,21 +143,23 @@ def append_spells(data: bytes, variants):
                 struct.pack_into("<i", row, idx * 4, int(value))
             else:
                 struct.pack_into("<I", row, idx * 4, int(value))
-        # the same English text in every locale column, so a client of any
-        # locale reads it; the mask bits stay as the base row had them
-        # the fourth block is the ToolTip, which is what the BUFF ICON shows on
-        # hover. It was hardcoded empty, so every aura this installer has ever
-        # written arrived as a nameless icon however good the manifest was.
         texts = (v["name"], v.get("rank_text", ""), v["description"],
                  v.get("tooltip", ""))
-        for (first, mask), text in zip(LOCALE_BLOCKS, texts):
-            off = _add_string(strings, text) if text else 0
-            for col in range(first, mask):
-                struct.pack_into("<I", row, col * 4, off)
-        records += row
-        ids[v["id"]] = count
-        count += 1
-        added += 1
+        ru_texts = v.get("ruRU", {})
+        ru_fields = ("name", "rank_text", "description", "tooltip")
+        for block, ((first, _mask), text) in enumerate(zip(LOCALE_BLOCKS, texts)):
+            _set_string(strings, row, first + LOCALE_ENUS, text)
+            ru_text = ru_texts.get(ru_fields[block], "")
+            if ru_text:
+                _set_string(strings, row, first + LOCALE_RURU, ru_text)
+        if exists:
+            start = row_index * rec
+            records[start:start + rec] = row
+        else:
+            records += row
+            ids[v["id"]] = count
+            count += 1
+            added += 1
     return _join(count, fields, rec, records, strings), added, missing
 
 

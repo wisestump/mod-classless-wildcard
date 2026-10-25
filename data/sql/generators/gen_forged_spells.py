@@ -35,9 +35,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+CLIENT_PATCH = os.path.abspath(os.path.join(HERE, os.pardir, os.pardir,
+                                             os.pardir, "client-patch"))
+sys.path.insert(0, CLIENT_PATCH)
 
 from gen_elemental_variants import (Dbc, F, SPELL_DBC_COLUMNS, LOCALE_BLOCKS,
                                     STRING_FIELDS, spell_values, sql_literal)
+from lib import locales as locale_support
 
 OUT_SQL = os.path.join(HERE, os.pardir, "db-world", "cw_spells_forged.sql")
 OUT_MANIFEST = os.path.join(HERE, os.pardir, os.pardir, os.pardir,
@@ -114,6 +118,11 @@ def title_sql():
     # test_forged.py reads the column list off the core's own dump.
     cols = (["ID", "Condition_ID"] + ["Name_Lang_%s" % l for l in TITLE_LOCALES] + ["Name_Lang_Mask"]
             + ["Name1_Lang_%s" % l for l in TITLE_LOCALES] + ["Name1_Lang_Mask", "Mask_ID"])
+    title_translations = locale_support.load_catalog().get("titles", {})
+    wanted = {str(t["id"]) for t in TITLES}
+    if set(title_translations) != wanted:
+        raise ValueError("ruRU title catalog IDs do not match forged title IDs")
+    ru_index = TITLE_LOCALES.index("ruRU")
     out = ["-- Titles: the Rebirth ranks, the run with no life lost, one per challenge.",
            "-- The client shows a title it has a CharTitles.dbc row for; the installer",
            "-- appends the same rows there. ClasslessMgr.cpp grants them by id.",
@@ -121,8 +130,13 @@ def title_sql():
            "INSERT INTO `chartitles_dbc` (%s) VALUES" % ", ".join("`%s`" % c for c in cols)]
     for n, t in enumerate(TITLES):
         name = sql_literal(t["name"])
-        row = ([str(t["id"]), "0"] + [name] * len(TITLE_LOCALES) + ["16712190"]
-               + [name] * len(TITLE_LOCALES) + ["16712190", str(t["bit"])])
+        names = [name] * len(TITLE_LOCALES)
+        names1 = [name] * len(TITLE_LOCALES)
+        translated = title_translations[str(t["id"])]
+        names[ru_index] = sql_literal(translated["male"])
+        names1[ru_index] = sql_literal(translated["female"])
+        row = ([str(t["id"]), "0"] + names + ["16712190"]
+               + names1 + ["16712190", str(t["bit"])])
         out.append("(%s)%s" % (", ".join(row), ";" if n == len(TITLES) - 1 else ","))
     out.append("")
     return out
@@ -2575,7 +2589,36 @@ def build(spell, only=None):
         spells.append(build_rebirth_aura(spell))
     else:
         tmeta = []
+    localize_spell_rows_ruRU(spells)
     return spells, lines, meta, visuals, tmeta
+
+
+def localize_spell_rows_ruRU(spells):
+    """Write catalog text into both the ruRU client manifest and server DBC rows."""
+    catalog = locale_support.load_catalog()
+    records = []
+    for spell in spells:
+        values = spell["values"]
+        records.append(dict(
+            id=spell["id"],
+            name=values[F["SpellName"]],
+            rank_text=values[F["Rank"]],
+            description=values[F["Description"]],
+            tooltip=values[F["ToolTip"]],
+        ))
+    locale_support.apply_ruRU({"spells": records}, catalog, "spells")
+    locale_indexes = {"name": F["SpellName"] + 11,
+                      "rank_text": F["Rank"] + 11,
+                      "description": F["Description"] + 11,
+                      "tooltip": F["ToolTip"] + 11}
+    for spell, record in zip(spells, records):
+        localized = record.get("ruRU", {})
+        if not localized.get("name"):
+            raise ValueError("ruRU spell name missing at id %d" % spell["id"])
+        spell["ruRU"] = localized
+        values = spell["values"]
+        for field, index in locale_indexes.items():
+            values[index] = localized.get(field, "")
 
 
 def generation_id(spells, visuals=(), creatures=()):
@@ -2598,8 +2641,11 @@ def generation_id(spells, visuals=(), creatures=()):
         h.update(json.dumps(c, sort_keys=True, default=str).encode("utf-8"))
     # and the titles: a renamed or added title is a client table the realm
     # has to reinstall, the same as a spell
+    title_translations = locale_support.load_catalog().get("titles", {})
     for t in TITLES:
-        h.update(json.dumps([t["id"], t["bit"], t["name"]], sort_keys=True).encode("utf-8"))
+        h.update(json.dumps([t["id"], t["bit"], t["name"],
+                             title_translations[str(t["id"])]],
+                            sort_keys=True, ensure_ascii=False).encode("utf-8"))
     return h.hexdigest()[:12]
 
 
@@ -2742,6 +2788,7 @@ def write_sql(spells, lines, gen, path, talents=()):
             L.append("(%d, '%s')%s" % (sp["id"], script_name(sp["key"]), end))
         L.append("")
 
+    summon_start = len(L)
     L.append("-- The creatures the Hero line summons. Markers carry no AI and the spell's")
     L.append("-- own area effect does the work; the Reclaimed Sentry is driven by")
     L.append("-- npc_cw_reclaimed_sentry, and the Venom Beetle is a pet.")
@@ -2842,6 +2889,15 @@ def write_sql(spells, lines, gen, path, talents=()):
             L.append("(%d, %d, %d, 12340)%s" % (entry, idx, sid, end))
         L.append("")
 
+    # Vendor clones used to occupy 990110-990209, which overlaps these summon
+    # entries. The vendor generator now moves its lists and removes the legacy
+    # clones; this final ordered file restores every summon template, model and
+    # creature spell after that cleanup.
+    summon_sql = L[summon_start:]
+    talents_start = next((i for i, line in enumerate(summon_sql)
+                          if line.startswith("-- The Hero talent tab.")), len(summon_sql))
+    summon_sql = summon_sql[:talents_start]
+
     if talents:
         L.append("-- The Hero talent tab. `talenttab_dbc` and `talent_dbc` are world-table")
         L.append("-- overrides: DBCDatabaseLoader::Load ADDS and overrides by id, so the")
@@ -2886,6 +2942,11 @@ def write_sql(spells, lines, gen, path, talents=()):
     L.append("")
 
     io.open(path, "w", encoding="utf-8", newline="\n").write("\n".join(L) + "\n")
+    summon_path = os.path.join(os.path.dirname(os.path.abspath(path)),
+                               "cw_z_summon_templates.sql")
+    io.open(summon_path, "w", encoding="utf-8", newline="\n").write(
+        "-- Generated from gen_forged_spells.py; reapply summon records after legacy vendor cleanup.\n"
+        + "\n".join(summon_sql) + "\n")
 
 
 def write_manifest(spells, lines, visuals, gen, path, run_desc):
@@ -2910,6 +2971,7 @@ def write_manifest(spells, lines, visuals, gen, path, run_desc):
                             rank_text=s["values"][F["Rank"]],
                             description=s["values"][F["Description"]],
                             tooltip=s["values"][F["ToolTip"]],
+                            ruRU=s.get("ruRU", {}),
                             base=s["base"], fields={str(k): v for k, v in s["fields"].items()},
                             values=s["values"], visual=s["visual"], icon=s["icon"],
                             sla=s["sla"])

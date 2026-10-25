@@ -18,6 +18,8 @@
 
 #include "Chat.h"
 #include "ChatCommand.h"
+#include "ClasslessCommandHelp.h"
+#include "ClasslessLocale.h"
 #include "ClasslessMgr.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -32,6 +34,15 @@
 using namespace Acore::ChatCommands;
 using namespace ClasslessWildcard;
 
+namespace
+{
+    template <typename... Args>
+    void SendFormatted(ChatHandler* handler, std::string const& format, Args const&... args)
+    {
+        handler->SendSysMessage(Acore::StringFormat(format, args...));
+    }
+}
+
 class classless_commandscript : public CommandScript
 {
 public:
@@ -41,28 +52,28 @@ public:
     {
         static ChatCommandTable classlessTable =
         {
-            { "status",  HandleStatus,        SEC_PLAYER, Console::No },
-            { "mode",    HandleMode,          SEC_PLAYER, Console::No },
-            { "learn",   HandleLearn,         SEC_PLAYER, Console::No },
-            { "unlearn", HandleUnlearn,       SEC_PLAYER, Console::No },
-            { "talent",  HandleTalent,        SEC_PLAYER, Console::No },
-            { "respec",  HandleRespec,        SEC_PLAYER, Console::No },
-            { "stats",   HandleStats,         SEC_PLAYER, Console::No },
-            { "stat",    HandleStat,          SEC_PLAYER, Console::No },
-            { "bar",     HandleBar,           SEC_PLAYER, Console::No },
-            { "archetypes", HandleArchetypes, SEC_PLAYER, Console::No },
-            { "archetype", HandleArchetype,   SEC_PLAYER, Console::No },
-            { "rebirth", HandleRebirth,       SEC_PLAYER, Console::No },
-            { "challenges", HandleChallenges, SEC_PLAYER, Console::No },
-            { "run",     HandleRun,           SEC_PLAYER, Console::No },
-            { "nemesis", HandleNemesis,       SEC_PLAYER, Console::No },
+            { "status",  HandleStatus,        CW_HELP_CLASSLESS_STATUS, SEC_PLAYER, Console::No },
+            { "mode",    HandleMode,          CW_HELP_CLASSLESS_MODE, SEC_PLAYER, Console::No },
+            { "learn",   HandleLearn,         CW_HELP_CLASSLESS_LEARN, SEC_PLAYER, Console::No },
+            { "unlearn", HandleUnlearn,       CW_HELP_CLASSLESS_UNLEARN, SEC_PLAYER, Console::No },
+            { "talent",  HandleTalent,        CW_HELP_CLASSLESS_TALENT, SEC_PLAYER, Console::No },
+            { "respec",  HandleRespec,        CW_HELP_CLASSLESS_RESPEC, SEC_PLAYER, Console::No },
+            { "stats",   HandleStats,         CW_HELP_CLASSLESS_STATS, SEC_PLAYER, Console::No },
+            { "stat",    HandleStat,          CW_HELP_CLASSLESS_STAT, SEC_PLAYER, Console::No },
+            { "bar",     HandleBar,           CW_HELP_CLASSLESS_BAR, SEC_PLAYER, Console::No },
+            { "archetypes", HandleArchetypes, CW_HELP_CLASSLESS_ARCHETYPES, SEC_PLAYER, Console::No },
+            { "archetype", HandleArchetype,   CW_HELP_CLASSLESS_ARCHETYPE, SEC_PLAYER, Console::No },
+            { "rebirth", HandleRebirth,       CW_HELP_CLASSLESS_REBIRTH, SEC_PLAYER, Console::No },
+            { "challenges", HandleChallenges, CW_HELP_CLASSLESS_CHALLENGES, SEC_PLAYER, Console::No },
+            { "run",     HandleRun,           CW_HELP_CLASSLESS_RUN, SEC_PLAYER, Console::No },
+            { "nemesis", HandleNemesis,       CW_HELP_CLASSLESS_NEMESIS, SEC_PLAYER, Console::No },
         };
         static ChatCommandTable wildcardTable =
         {
-            { "status",  HandleStatus,        SEC_PLAYER, Console::No },
-            { "reroll",  HandleReroll,        SEC_PLAYER, Console::No },
-            { "rerolltalent", HandleRerollTalent, SEC_PLAYER, Console::No },
-            { "lock",    HandleLock,          SEC_PLAYER, Console::No },
+            { "status",  HandleStatus,        CW_HELP_WILDCARD_STATUS, SEC_PLAYER, Console::No },
+            { "reroll",  HandleReroll,        CW_HELP_WILDCARD_REROLL, SEC_PLAYER, Console::No },
+            { "rerolltalent", HandleRerollTalent, CW_HELP_WILDCARD_REROLLTALENT, SEC_PLAYER, Console::No },
+            { "lock",    HandleLock,          CW_HELP_WILDCARD_LOCK, SEC_PLAYER, Console::No },
         };
         static ChatCommandTable root =
         {
@@ -76,7 +87,7 @@ public:
     {
         if (!sClasslessMgr->cfg.enabled)
         {
-            handler->SendSysMessage("Hero Advancement is disabled on this realm.");
+            handler->SendSysMessage(LocaleText(handler->GetSession()->GetPlayer(), "Hero Advancement is disabled on this realm.", "Развитие героя отключено на этом игровом мире."));
             return false;
         }
         return true;
@@ -89,31 +100,40 @@ public:
         Player* player = handler->GetSession()->GetPlayer();
         CharState& st = sClasslessMgr->GetState(player);
 
-        handler->PSendSysMessage("Path: {}", st.mode == Mode::Wildcard ? "Wildcard" :
-            (st.mode == Mode::Classless ? "Classless" : "not chosen yet"));
-        handler->PSendSysMessage("Abilities: {} | Talents: {}", st.abilities.size(), st.talents.size());
+        SendFormatted(handler, LocaleText(player, "Path: {}", "Путь: {}"), st.mode == Mode::Wildcard
+            ? LocaleText(player, "Wildcard", "Случайный") : (st.mode == Mode::Classless
+                ? LocaleText(player, "Classless", "Свободный") : LocaleText(player, "not chosen yet", "ещё не выбран")));
+        SendFormatted(handler, LocaleText(player, "Abilities: {} | Talents: {}", "Способностей: {} | талантов: {}"),
+            st.abilities.size(), st.talents.size());
         if (st.mode == Mode::Classless)
         {
-            handler->PSendSysMessage("Ability Essence: {} | Talent Essence: {}", st.abilityEssence, st.talentEssence);
+            SendFormatted(handler, LocaleText(player, "Ability Essence: {} | Talent Essence: {}", "Эссенция способностей: {} | эссенция талантов: {}"),
+                st.abilityEssence, st.talentEssence);
             if (st.archetype)
             {
                 std::string next;
                 auto queue = sClasslessMgr->ArchetypeQueue(player);
                 if (!queue.empty())
                     next = queue.front().second > player->GetLevel()
-                        ? Acore::StringFormat(" (next: {} at level {})", sClasslessMgr->SpellNameOf(queue.front().first), uint32(queue.front().second))
-                        : Acore::StringFormat(" (next: {}, when you have the Ability Essence)", sClasslessMgr->SpellNameOf(queue.front().first));
-                handler->PSendSysMessage("Following: |cffffff00{}|r{}", sClasslessMgr->ArchetypeName(st), next);
+                        ? Acore::StringFormat(LocaleText(player, " (next: {} at level {})", " (далее: {} на уровне {})"),
+                            sClasslessMgr->SpellNameOf(queue.front().first, player), uint32(queue.front().second))
+                        : Acore::StringFormat(LocaleText(player, " (next: {}, when you have the Ability Essence)",
+                            " (далее: {}, когда будет эссенция способностей)"), sClasslessMgr->SpellNameOf(queue.front().first, player));
+                SendFormatted(handler, LocaleText(player, "Following: |cffffff00{}|r{}", "Выбран архетип: |cffffff00{}|r{}"),
+                    sClasslessMgr->ArchetypeName(st, player), next);
             }
         }
         if (st.mode == Mode::Wildcard)
         {
-            handler->PSendSysMessage("Reroll charges: {} (you earn {} every level from level {}; each rerolls an ability or a talent)",
+            SendFormatted(handler, LocaleText(player,
+                "Reroll charges: {} (you earn {} every level from level {}; each rerolls an ability or a talent)",
+                "Заряды переброса: {} (вы получаете {} за уровень, начиная с уровня {}; каждый позволяет перебросить способность или талант)"),
                 st.rerolls, sClasslessMgr->cfg.wcRerollsPerLevel, sClasslessMgr->cfg.wcRollStartLevel);
-            handler->PSendSysMessage("Synergy chance: {}% (rises each time you reroll)",
+            SendFormatted(handler, LocaleText(player, "Synergy chance: {}% (rises each time you reroll)",
+                "Шанс синергии: {}% (увеличивается после каждого переброса)"),
                 std::min<uint32>(sClasslessMgr->cfg.wcSynergyBaseChance + st.pity * sClasslessMgr->cfg.wcSynergyIncrement, 100));
             if (st.bans.empty())
-                handler->PSendSysMessage("On reroll cooldown: none");
+                SendFormatted(handler, LocaleText(player, "On reroll cooldown: none", "Ожидающих переброса способностей нет."));
             else
             {
                 // Show the shortest remaining wait, so the number means
@@ -123,9 +143,11 @@ public:
                 for (auto const& ban : st.bans)
                     soonest = std::min(soonest, ban.rollsLeft);
                 uint32 const wait = uint32(std::max<int32>(0, soonest));
-                handler->PSendSysMessage(
-                    "On reroll cooldown: {} (things you rerolled; the next one returns in {} roll{})",
-                    uint32(st.bans.size()), wait, wait == 1 ? "" : "s");
+                SendFormatted(handler,
+                    LocaleText(player,
+                        "On reroll cooldown: {} (things you rerolled; the next one returns in {} roll{})",
+                        "На перезарядке переброса: {} (следующая способность вернётся через {} переброс{})"),
+                    uint32(st.bans.size()), wait, "");
             }
         }
         return true;
@@ -144,11 +166,12 @@ public:
             sClasslessMgr->SetMode(player, Mode::Wildcard, &err);
         else
         {
-            handler->SendSysMessage("Usage: .classless mode classless | wildcard");
+            handler->SendSysMessage(LocaleText(player, "Usage: .classless mode classless | wildcard",
+                "Использование: .classless mode classless | wildcard"));
             return true;
         }
         if (!err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -158,7 +181,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->BuyAbility(handler->GetSession()->GetPlayer(), spellId, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -168,7 +191,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->UnlearnAbility(handler->GetSession()->GetPlayer(), spellId, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -178,7 +201,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->BuyTalentRank(handler->GetSession()->GetPlayer(), talentId, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -188,7 +211,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->Respec(handler->GetSession()->GetPlayer(), &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -213,14 +236,15 @@ public:
         else if (barName == "energy") idx = 3;
         else if (barName != "default")
         {
-            handler->SendSysMessage("Usage: .classless bar mana|rage|energy|default");
+            handler->SendSysMessage(LocaleText(player, "Usage: .classless bar mana|rage|energy|default",
+                "Использование: .classless bar mana|rage|energy|default"));
             return true;
         }
         std::string err;
         if (sClasslessMgr->SetDisplayPower(player, idx, &err))
-            handler->PSendSysMessage("Main resource bar set to {}.", barName);
+            SendFormatted(handler, LocaleText(player, "Main resource bar set to {}.", "Основная шкала ресурса: {}."), barName);
         else
-            handler->PSendSysMessage("{}", err);
+            SendFormatted(handler, "{}", LocaleError(player, err));
         return true;
     }
 
@@ -233,11 +257,16 @@ public:
         uint32 budget = sClasslessMgr->StatBudget(player);
         uint32 spent = sClasslessMgr->SpentStatPoints(st);
         uint32 v = sClasslessMgr->cfg.statValuePerPoint;
-        handler->PSendSysMessage("Stat points: {} spent / {} total ({} unspent). Each point grants +{} stat.",
+        SendFormatted(handler, LocaleText(player,
+            "Stat points: {} spent / {} total ({} unspent). Each point grants +{} stat.",
+            "Очки характеристик: потрачено {} из {} (свободно {}). Каждое очко даёт +{} к характеристике."),
             spent, budget, budget > spent ? budget - spent : 0, v);
-        handler->PSendSysMessage("STR {} | AGI {} | STA {} | INT {} | SPI {} (points)",
+        SendFormatted(handler, LocaleText(player, "STR {} | AGI {} | STA {} | INT {} | SPI {} (points)",
+            "СИЛ {} | ЛОВ {} | ВЫН {} | ИНТ {} | ДУХ {} (очков)"),
             st.statAlloc[0], st.statAlloc[1], st.statAlloc[2], st.statAlloc[3], st.statAlloc[4]);
-        handler->SendSysMessage("Set one with: .classless stat str|agi|sta|int|spi <points>. Reallocation is free.");
+        handler->SendSysMessage(LocaleText(player,
+            "Set one with: .classless stat str|agi|sta|int|spi <points>. Reallocation is free.",
+            "Задать значения: .classless stat str|agi|sta|int|spi <points>. Перераспределение бесплатно."));
         return true;
     }
 
@@ -248,7 +277,9 @@ public:
         int8 index = StatIndexFromName(statName);
         if (index < 0)
         {
-            handler->SendSysMessage("Usage: .classless stat str|agi|sta|int|spi <points>");
+            handler->SendSysMessage(LocaleText(handler->GetSession()->GetPlayer(),
+                "Usage: .classless stat str|agi|sta|int|spi <points>",
+                "Использование: .classless stat str|agi|sta|int|spi <points>"));
             return true;
         }
         Player* player = handler->GetSession()->GetPlayer();
@@ -256,7 +287,7 @@ public:
         alloc[index] = points;
         std::string err;
         if (!sClasslessMgr->SetStatAllocation(player, alloc, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -268,14 +299,20 @@ public:
         for (auto const& [id, arch] : sClasslessMgr->Archetypes())
         {
             uint32 const ranks = arch.TalentRanks();
-            handler->PSendSysMessage("{}. |cffffff00{}|r: {} ({} abilities, {} talent ranks, level 1 to 80){}",
-                id, arch.name, arch.description, uint32(arch.abilities.size()), ranks,
+            SendFormatted(handler, LocaleText(handler->GetSession()->GetPlayer(),
+                "{}. |cffffff00{}|r: {} ({} abilities, {} talent ranks, level 1 to 80){}",
+                "{}. |cffffff00{}|r: {} (способностей: {}, рангов талантов: {}, уровни 1–80){}"),
+                id, sClasslessMgr->ArchetypeName(id, handler->GetSession()->GetPlayer()),
+                sClasslessMgr->ArchetypeDescription(id, handler->GetSession()->GetPlayer()),
+                uint32(arch.abilities.size()), ranks,
                 following == id ? " |cff00ff00following|r" : "");
         }
         if (sClasslessMgr->Archetypes().empty())
-            handler->SendSysMessage("No archetypes are available.");
+            handler->SendSysMessage(LocaleText(handler->GetSession()->GetPlayer(), "No archetypes are available.", "Нет доступных архетипов."));
         else
-            handler->SendSysMessage("Follow one with: .classless archetype <id>   Stop with: .classless archetype 0");
+            handler->SendSysMessage(LocaleText(handler->GetSession()->GetPlayer(),
+                "Follow one with: .classless archetype <id>   Stop with: .classless archetype 0",
+                "Выбрать: .classless archetype <id>. Отключить: .classless archetype 0"));
         return true;
     }
 
@@ -285,7 +322,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->ApplyArchetype(handler->GetSession()->GetPlayer(), archetypeId, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -327,13 +364,18 @@ public:
 
     static void DescribeRebirth(ChatHandler* handler, Player* player, std::string const& command, bool keepQuests)
     {
-        handler->PSendSysMessage("This sends you back to level 1 for {} gold. Your build is wiped{} and your worn "
+        SendFormatted(handler, LocaleText(player,
+            "This sends you back to level 1 for {} gold. Your build is wiped{} and your worn "
             "gear goes into your bags (by mail if they are full); gold, bank, reputation, riding, flight paths and the heirlooms you list stay.",
+            "Вы начнёте новую жизнь с 1-го уровня за {} золотых. Сборка будет сброшена{}, а надетое снаряжение попадёт в сумки (или будет отправлено почтой, если сумки полны); золото, банк, репутация, навык верховой езды, маршруты полёта и указанные унаследованные способности сохранятся."),
             sClasslessMgr->RebirthCost(sClasslessMgr->GetState(player)),
-            keepQuests ? ", your quests are kept," : " along with your quest progress,");
+            LocaleText(player, keepQuests ? ", your quests are kept," : " along with your quest progress,",
+                keepQuests ? ", задания сохраняются," : " вместе с вашим прогрессом заданий,"));
         if (!keepQuests)
-            handler->PSendSysMessage("To keep your quests, add keepquests: {} keepquests confirm", command);
-        handler->PSendSysMessage("Type {}{} confirm to go ahead.", command, keepQuests ? " keepquests" : "");
+            SendFormatted(handler, LocaleText(player, "To keep your quests, add keepquests: {} keepquests confirm",
+                "Чтобы сохранить задания, добавьте keepquests: {} keepquests confirm"), command);
+        SendFormatted(handler, LocaleText(player, "Type {}{} confirm to go ahead.", "Для подтверждения введите {}{} confirm."),
+            command, keepQuests ? " keepquests" : "");
     }
 
     // ".classless rebirth [heirloom ability id ...] [keepquests] [confirm]":
@@ -358,7 +400,7 @@ public:
             return true;
         }
         if (!sClasslessMgr->Rebirth(player, heirlooms, keepQuests, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -369,29 +411,42 @@ public:
             return true;
         Player* player = handler->GetSession()->GetPlayer();
         CharState& st = sClasslessMgr->GetState(player);
-        handler->SendSysMessage(Acore::StringFormat("Challenge runs, started before level {} with .classless run <id>:",
+        handler->SendSysMessage(Acore::StringFormat(LocaleText(player,
+            "Challenge runs, started before level {} with .classless run <id>:",
+            "Испытания. Начните до достижения {} уровня командой .classless run <id>:"),
             uint32(sClasslessMgr->cfg.modeChoiceDeadline)));
         for (Challenge const& ch : ClasslessMgr::Challenges())
         {
             auto best = st.runBest.find(ch.id);
-            std::string const lives = ch.lives == UNLIMITED_LIVES ? std::string("unlimited lives")
-                : Acore::StringFormat("{} {}", uint32(ch.lives), ch.lives == 1 ? "life" : "lives");
-            handler->SendSysMessage(Acore::StringFormat("  {}. |cffffd100{}|r  {}, {} gold.  {}{}",
-                uint32(ch.id), ch.name, lives, ch.rewardGold, sClasslessMgr->ChallengeText(ch.rule),
+            std::string const lives = ch.lives == UNLIMITED_LIVES
+                ? LocaleText(player, "unlimited lives", "неограниченное число жизней")
+                : Acore::StringFormat("{} {}", uint32(ch.lives),
+                    LocaleCount(player, ch.lives, "life", "lives", "жизнь", "жизни", "жизней"));
+            handler->SendSysMessage(Acore::StringFormat(LocaleText(player,
+                "  {}. |cffffd100{}|r  {}, {} gold.  {}{}",
+                "  {}. |cffffd100{}|r  {}, награда: {} золотых.  {}{}"),
+                uint32(ch.id), sClasslessMgr->ChallengeName(ch, player), lives, ch.rewardGold,
+                sClasslessMgr->ChallengeText(ch.rule, player),
                 best == st.runBest.end() ? ""
-                    : Acore::StringFormat("  Best: level {}{}", uint32(best->second.first),
-                                          best->second.second ? ", finished" : "")));
+                    : Acore::StringFormat(LocaleText(player, "  Best: level {}{}", "  Лучший результат: уровень {}{}"),
+                        uint32(best->second.first), best->second.second
+                            ? LocaleText(player, ", finished", " (пройдено)") : "")));
         }
         if (st.run)
             if (Challenge const* ch = ClasslessMgr::GetChallenge(st.run))
             {
                 if (st.livesMax == UNLIMITED_LIVES)
-                    handler->SendSysMessage(Acore::StringFormat("Current run: |cffffd100{}|r, unlimited lives.", ch->name));
+                    handler->SendSysMessage(Acore::StringFormat(LocaleText(player,
+                        "Current run: |cffffd100{}|r, unlimited lives.",
+                        "Текущее испытание: |cffffd100{}|r, жизни не ограничены."),
+                        sClasslessMgr->ChallengeName(*ch, player)));
                 else
-                    handler->SendSysMessage(Acore::StringFormat("Current run: |cffffd100{}|r, {} of {} {} left.",
-                        ch->name, uint32(st.lives), uint32(st.livesMax), st.livesMax == 1 ? "life" : "lives"));
+                    handler->SendSysMessage(Acore::StringFormat(LocaleText(player,
+                        "Current run: |cffffd100{}|r, {} of {} left.",
+                        "Текущее испытание: |cffffd100{}|r, осталось {} из {}."),
+                        sClasslessMgr->ChallengeName(*ch, player), uint32(st.lives), uint32(st.livesMax)));
             }
-        handler->SendSysMessage(Acore::StringFormat("Shards: {}.", st.shards));
+        handler->SendSysMessage(Acore::StringFormat(LocaleText(player, "Shards: {}.", "Осколки: {}."), st.shards));
         return true;
     }
 
@@ -414,7 +469,7 @@ public:
         std::string err;
         Player* player = handler->GetSession()->GetPlayer();
         if (!sClasslessMgr->StartRun(player, uint8(challengeId), &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -424,7 +479,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->Reroll(handler->GetSession()->GetPlayer(), false, spellId, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -435,7 +490,7 @@ public:
         std::string err;
         if (!sClasslessMgr->Reroll(handler->GetSession()->GetPlayer(), true, talentId, &err,
                                    scrolls.value_or(0)) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 
@@ -445,7 +500,7 @@ public:
             return true;
         std::string err;
         if (!sClasslessMgr->ToggleLock(handler->GetSession()->GetPlayer(), spellId, &err) && !err.empty())
-            handler->SendSysMessage(err);
+            handler->SendSysMessage(LocaleError(handler->GetSession()->GetPlayer(), err));
         return true;
     }
 };

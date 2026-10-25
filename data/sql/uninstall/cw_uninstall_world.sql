@@ -73,6 +73,7 @@ DROP TABLE IF EXISTS `cw_form_kits`;
 DROP TABLE IF EXISTS `cw_ability_override`;
 DROP TABLE IF EXISTS `cw_talent_override`;
 DROP TABLE IF EXISTS `cw_archetypes`;
+DROP TABLE IF EXISTS `cw_archetypes_locale`;
 
 -- module items: scrolls + classless item pack
 DELETE FROM `item_template` WHERE `entry` IN (990101, 990102)
@@ -86,12 +87,31 @@ DELETE FROM `item_template` WHERE `entry` IN (990101, 990102)
 -- the shop is split into browsable lists now and installs none of these)
 DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 23 AND `SourceGroup` = 990100;
 
+-- Russian names and descriptions shipped by the module.
+DELETE FROM `creature_template_locale` WHERE `locale` = 'ruRU'
+  AND `entry` IN (990099, 990100, 990110, 990111, 990112, 990113, 990114, 990115,
+                  990117, 990118, 990119, 991000, 991001, 991002, 991003, 991004,
+                  991010, 991011, 991012, 991013, 991014, 991020, 991021, 991022,
+                  991023, 991024, 991034);
+DELETE FROM `item_template_locale` WHERE `locale` = 'ruRU'
+  AND (`ID` = 990101
+    OR `ID` BETWEEN 990201 AND 990212
+    OR `ID` BETWEEN 990250 AND 990272
+    OR `ID` BETWEEN 990280 AND 990295
+    OR `ID` BETWEEN 990300 AND 990497
+    OR `ID` BETWEEN 990500 AND 990535
+    OR `ID` BETWEEN 991000 AND 991020
+    OR `ID` = 991030);
+
 -- The split vendor lists: one packet holds 150 items, so the catalogue is
 -- spread over lists 990110+, each fronted by its own unspawned creature_template
 -- clone. Remove those with their rows.
 DELETE FROM `npc_vendor` WHERE `entry` BETWEEN 990110 AND 990209;
 DELETE FROM `creature_template_model` WHERE `CreatureID` BETWEEN 990110 AND 990209;
 DELETE FROM `creature_template` WHERE `entry` BETWEEN 990110 AND 990209;
+DELETE FROM `npc_vendor` WHERE `entry` BETWEEN 991000 AND 991099;
+DELETE FROM `creature_template_model` WHERE `CreatureID` BETWEEN 991000 AND 991099;
+DELETE FROM `creature_template` WHERE `entry` BETWEEN 991000 AND 991099;
 
 -- Hero Advancement NPC: vendor, template and spawns (schema-adaptive:
 -- playerbots forks use creature.id1, stock uses creature.id)
@@ -118,6 +138,10 @@ DELETE FROM `creature_template` WHERE `entry` = 990100;
 
 -- the chat commands' help text (cw_world_commands.sql)
 DELETE FROM `command` WHERE `name` IN ('classless', 'wildcard') OR `name` LIKE 'classless %' OR `name` LIKE 'wildcard %';
+DELETE FROM `acore_string` WHERE `entry` IN (
+    15990000, 15990001, 15990002, 15990003, 15990004, 15990005, 15990006,
+    15990007, 15990008, 15990009, 15990010, 15990011, 15990012, 15990013,
+    15990014, 15990015, 15990016, 15990017, 15990018);
 
 -- all-race/class skill validity rows (restores stock race/class skill rules;
 -- at next login the core deletes now-invalid cross-class spells and skills

@@ -52,7 +52,7 @@ JEWEL_SLOTS = {2, 11, 12, 23}          # neck, finger, trinket, held off-hand
 TIERS = [(1, 20), (21, 40), (41, 60), (61, 80)]
 
 # vendorEntry = LIST_BASE + category*10 + tier, tier 4 meaning "all levels".
-LIST_BASE = 990110
+LIST_BASE = 991000
 
 
 def split_top(s):
@@ -142,11 +142,26 @@ def tier_of(level):
 
 
 CATS = [
-    (0, "Weapons",            "every blade, bow, staff and wand"),
-    (1, "Armor",              "chest, legs, shoulders, cloaks and shields"),
-    (2, "Jewelry & off-hand", "necks, rings, trinkets and held items"),
-    (3, "Heirloom gear",      "bought once, it scales with you to 80"),
+    (0, "Weapons",            "every blade, bow, staff and wand",
+     "Оружие", "все клинки, луки, посохи и жезлы"),
+    (1, "Armor",              "chest, legs, shoulders, cloaks and shields",
+     "Доспехи", "нагрудники, поножи, наплечники, плащи и щиты"),
+    (2, "Jewelry & off-hand", "necks, rings, trinkets and held items",
+     "Украшения и предметы в левой руке",
+     "ожерелья, кольца, аксессуары и предметы в левой руке"),
+    (3, "Heirloom gear",      "bought once, it scales with you to 80",
+     "Наследуемое снаряжение",
+     "покупается один раз и растёт вместе с вами до 80-го уровня"),
 ]
+
+RU_LEVEL_LABEL = "Уровни %d–%d"
+RU_ALL_LEVELS_LABEL = "Все уровни"
+
+
+def category_label_ru(cat, tier):
+    if tier is None:
+        return CATS[cat][3] if cat == 3 else RU_ALL_LEVELS_LABEL
+    return RU_LEVEL_LABEL % TIERS[tier]
 
 # category -> tier -> items.  Heirlooms carry RequiredLevel 1 because they
 # scale, so bracketing them by level would be meaningless: they get one list.
@@ -162,7 +177,7 @@ def entry_for(cat, tier):
 
 
 lists = []      # (vendorEntry, cat, tier, label, items)
-for cat, cname, _desc in CATS:
+for cat, cname, _desc, _name_ru, _blurb_ru in CATS:
     if cat == 3:
         got = sorted(buckets.get((cat, None), []), key=lambda i: (i["inv"], i["entry"]))
         lists.append((entry_for(cat, None), cat, None, cname, got))
@@ -213,6 +228,8 @@ L.append("DELETE FROM `npc_vendor` WHERE `entry` = %d AND `item` BETWEEN %d AND 
          % (NPC, OWNED_LO, OWNED_HI))
 L.append("DELETE FROM `npc_vendor` WHERE `entry` BETWEEN %d AND %d;"
          % (LIST_BASE, LIST_BASE + 99))
+L.append("-- Remove the former vendor-list range; cw_z_summon_templates.sql restores summon rows there.")
+L.append("DELETE FROM `npc_vendor` WHERE `entry` BETWEEN 990110 AND 990209;")
 L.append("DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 23")
 L.append("  AND `SourceGroup` = %d AND `SourceEntry` BETWEEN %d AND %d;"
          % (NPC, OWNED_LO, OWNED_HI))
@@ -227,6 +244,9 @@ L.append(textwrap.dedent("""\
     """))
 L.append("DELETE FROM `creature_template` WHERE `entry` BETWEEN %d AND %d;"
          % (LIST_BASE, LIST_BASE + 99))
+L.append("DELETE FROM `creature_template` WHERE `entry` BETWEEN 990110 AND 990209;")
+L.append("DELETE FROM `creature_template_model` WHERE `CreatureID` BETWEEN 990110 AND 990209;")
+L.append("DELETE FROM `creature_template_spell` WHERE `CreatureID` BETWEEN 990110 AND 990209;")
 for entry, cat, tier, label, got in lists:
     cname = CATS[cat][1]
     sub = cname if tier is None else "%s: %s" % (cname, label)
@@ -303,6 +323,7 @@ H.append(textwrap.dedent("""\
             uint32_t    entry;    // npc_vendor.entry
             uint8_t     category; // index into VENDOR_CATEGORIES
             char const* label;
+            char const* labelRu;
             uint32_t    count;    // items in the list, for the menu text
             bool        whole;    // the category's everything-at-once list
         };
@@ -311,20 +332,24 @@ H.append(textwrap.dedent("""\
         {
             char const* name;
             char const* blurb;
+            char const* nameRu;
+            char const* blurbRu;
         };
     """))
 
 H.append("    constexpr VendorCategory VENDOR_CATEGORIES[] =")
 H.append("    {")
-for cat, cname, desc in CATS:
-    H.append('        { "%s", "%s" },' % (cname, desc))
+for cat, cname, desc, name_ru, blurb_ru in CATS:
+    H.append('        { "%s", "%s", "%s", "%s" },'
+             % (cname, desc, name_ru, blurb_ru))
 H.append("    };")
 H.append("")
 H.append("    constexpr VendorList VENDOR_LISTS[] =")
 H.append("    {")
 for entry, cat, tier, label, got in lists:
-    H.append('        { %d, %d, "%s", %d, %s },'
-             % (entry, cat, label, len(got), "true" if tier is None else "false"))
+    H.append('        { %d, %d, "%s", "%s", %d, %s },'
+             % (entry, cat, label, category_label_ru(cat, tier), len(got),
+                "true" if tier is None else "false"))
 H.append("    };")
 H.append("")
 H.append("    // The supplies counter is the creature's own list, which")

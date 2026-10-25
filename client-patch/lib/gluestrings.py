@@ -38,6 +38,25 @@ BULLETS = (
     "- In game press N, or visit a Hero Advancement NPC in any major city.",
 )
 
+PARAGRAPH_RURU = (
+    "Каждый персонаж — {name}. Вы можете изучить любое заклинание и талант, "
+    "владеть любым оружием и носить любую броню: покупайте способности за "
+    "эссенцию способностей или получайте их случайным образом в режиме "
+    "«Случайный путь».|n|n"
+    "У всех {name} одинаковые базовые характеристики, здоровье и ресурсы, "
+    "поэтому доступ к способностям не зависит от класса. Расовые особенности "
+    "сохраняются — выберите подходящие расу и внешность."
+)
+
+BULLETS_RURU = (
+    "- Любая роль: танк, целитель, заклинатель или боец.",
+    "- Доступны все типы брони и любое оружие.",
+    "- Одновременно доступны мана, ярость и энергия.",
+    "- Распределяйте основные характеристики и бесплатно меняйте их.",
+    "- Изучайте заклинания и таланты любого класса.",
+    "- Нажмите N в игре или найдите наставника героя в крупном городе.",
+)
+
 _ASSIGNMENT = re.compile(
     r'^(?P<key>[A-Z0-9_]+)(?P<gap>\s*=\s*)"(?P<value>(?:\\.|[^"\\])*)"',
     re.MULTILINE)
@@ -47,26 +66,29 @@ def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def build_replacements(name: str = "Hero"):
+def build_replacements(name: str = "Hero", locale: str = "enUS"):
     """Map every class string key to its Hero replacement."""
     out = {}
-    paragraph = PARAGRAPH.format(name=name)
+    russian = locale.lower() == "ruru"
+    display_name = "Герой" if russian and name == "Hero" else name
+    paragraph = (PARAGRAPH_RURU if russian else PARAGRAPH).format(name=display_name)
+    bullets = BULLETS_RURU if russian else BULLETS
     for token in CLASS_TOKENS:
         out["CLASS_%s" % token] = paragraph
         out["CLASS_%s_FEMALE" % token] = paragraph
-        for index, bullet in enumerate(BULLETS):
+        for index, bullet in enumerate(bullets):
             out["CLASS_INFO_%s%d" % (token, index)] = bullet
     return out
 
 
-def rewrite(text: str, name: str = "Hero"):
+def rewrite(text: str, name: str = "Hero", locale: str = "enUS"):
     """Return (new_text, keys_replaced).
 
     Keys already present are rewritten in place. Bullet slots a class does not
     have are not invented: the client only reads the indexes it knows about,
     and adding more would leave stray text nothing displays.
     """
-    replacements = build_replacements(name)
+    replacements = build_replacements(name, locale)
     replaced = []
 
     def substitute(match):

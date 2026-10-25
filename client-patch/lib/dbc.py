@@ -130,7 +130,7 @@ def read_string(strings: bytes, offset: int) -> str:
     return strings[offset:end].decode("utf-8", "replace")
 
 
-def rename_all_classes(data: bytes, new_name: str):
+def rename_all_classes(data: bytes, new_name: str, ru_name: str = ""):
     """Point every localized class-name column at a single new name.
 
     Returns (new_dbc_bytes, [(class_id, old_name), ...]).
@@ -155,6 +155,7 @@ def rename_all_classes(data: bytes, new_name: str):
 
     columns = (CHRCLASSES_NAME_COLUMNS + CHRCLASSES_NAME_FEMALE_COLUMNS
                + CHRCLASSES_NAME_MALE_COLUMNS)
+    ru_columns = (12, 29, 46)
 
     records = bytearray(data[records_off:strings_off])
     renamed = []
@@ -168,6 +169,12 @@ def rename_all_classes(data: bytes, new_name: str):
         renamed.append((class_id, old, token))
         for column in columns:
             struct.pack_into("<I", records, base + column * 4, name_offset)
+        if ru_name:
+            ru_bytes = ru_name.encode("utf-8") + b"\0"
+            ru_offset = len(new_strings)
+            new_strings += ru_bytes
+            for column in ru_columns:
+                struct.pack_into("<I", records, base + column * 4, ru_offset)
 
     header = WDBC_MAGIC + struct.pack("<4I", record_count, field_count,
                                       record_size, len(new_strings))

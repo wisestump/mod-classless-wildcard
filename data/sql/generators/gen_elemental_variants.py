@@ -769,7 +769,8 @@ def write_manifest(variants, path, run_desc):
                variants=[])
     for v in variants:
         out["variants"].append(dict(
-            id=v["id"], first=v["first"], base=v["base"], element=v["element"], rank=v["rank"],
+            id=v["id"], first=v["first"], base=v["base"],
+            base_name=v["base_name"], element=v["element"], rank=v["rank"],
             name=v["name"], rank_text=v["rank_text"], description=v["description"],
             tooltip=v["tooltip"],
             fields={str(k): val for k, val in v["overrides"].items()},

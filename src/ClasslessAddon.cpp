@@ -20,7 +20,9 @@
  */
 
 #include "Chat.h"
+#include "ClasslessLocale.h"
 #include "ClasslessMgr.h"
+#include "ClasslessUnicode.h"
 #include "DBCStores.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -74,6 +76,23 @@ namespace
             if (c == '|' || c == '\t' || c == '\n')
                 c = ' ';
         return s;
+    }
+
+    std::vector<std::string> SplitUtf8(std::string const& text, size_t maxBytes)
+    {
+        std::vector<std::string> pieces;
+        for (size_t pos = 0; pos < text.size();)
+        {
+            size_t len = std::min(maxBytes, text.size() - pos);
+            if (pos + len < text.size())
+                while (len && (uint8(text[pos + len]) & 0xC0) == 0x80)
+                    --len;
+            if (!len)
+                break;
+            pieces.emplace_back(text.substr(pos, len));
+            pos += len;
+        }
+        return pieces;
     }
 
     void SendState(Player* player)
@@ -167,7 +186,7 @@ namespace
 
     void SendErr(Player* player, std::string const& text)
     {
-        SendAddon(player, "ERR|" + SanitizeText(text));
+        SendAddon(player, "ERR|" + SanitizeText(LocaleError(player, text)));
     }
 
     void SendOk(Player* player, std::string const& op)
@@ -214,31 +233,40 @@ namespace
         bool const levelOnly = levelScope && sClasslessMgr->cfg.respectLevelReqs;
         uint32 const heroLevel = player->GetLevel();
 
-        std::vector<AbilityEntry const*> list;
+        struct Row { AbilityEntry const* entry; std::string name; };
+        std::vector<Row> list;
         for (auto const& [firstSpell, e] : sClasslessMgr->Abilities())
             if (e.enabled && (heroPage ? e.forged : (!e.forged && (e.classMask & classMask)))
                 && (!e.variant || sClasslessMgr->cfg.elementalShowInBrowser)
                 && (!typeArg || uint32(e.type) + 1 == typeArg)
                 && (!levelOnly || e.rankLevels.empty() || uint32(e.rankLevels[0]) <= heroLevel))
-                list.push_back(&e);
+                list.push_back({ &e, sClasslessMgr->SpellNameOf(e.firstSpellId, player) });
 
         auto level = [](AbilityEntry const* e) { return e->rankLevels.empty() ? 1u : uint32(e->rankLevels[0]); };
-        std::stable_sort(list.begin(), list.end(), [&](AbilityEntry const* a, AbilityEntry const* b)
+        auto nameBefore = [](std::string const& a, std::string const& b)
         {
+            return Unicode::CaseInsensitiveLess(a, b);
+        };
+        std::stable_sort(list.begin(), list.end(), [&](Row const& a, Row const& b)
+        {
+            AbilityEntry const* left = a.entry;
+            AbilityEntry const* right = b.entry;
             switch (sort)
             {
                 case SORT_LEVEL_DESC:
-                    return level(a) != level(b) ? level(a) > level(b) : a->name < b->name;
+                    return level(left) != level(right) ? level(left) > level(right) : nameBefore(a.name, b.name);
                 case SORT_NAME_ASC:
-                    return a->name != b->name ? a->name < b->name : level(a) < level(b);
+                    return nameBefore(a.name, b.name) ? true : nameBefore(b.name, a.name)
+                        ? false : level(left) < level(right);
                 case SORT_NAME_DESC:
-                    return a->name != b->name ? a->name > b->name : level(a) < level(b);
+                    return nameBefore(b.name, a.name) ? true : nameBefore(a.name, b.name)
+                        ? false : level(left) < level(right);
                 case SORT_TYPE:
-                    if (a->type != b->type)
-                        return uint8(a->type) < uint8(b->type);
-                    return level(a) != level(b) ? level(a) < level(b) : a->name < b->name;
+                    if (left->type != right->type)
+                        return uint8(left->type) < uint8(right->type);
+                    return level(left) != level(right) ? level(left) < level(right) : nameBefore(a.name, b.name);
                 default:
-                    return level(a) != level(b) ? level(a) < level(b) : a->name < b->name;
+                    return level(left) != level(right) ? level(left) < level(right) : nameBefore(a.name, b.name);
             }
         });
 
@@ -250,7 +278,7 @@ namespace
         uint32 start = page * LIST_PAGE;
         for (uint32 i = start; i < list.size() && i < start + LIST_PAGE; ++i)
         {
-            AbilityEntry const* e = list[i];
+            AbilityEntry const* e = list[i].entry;
             body += Acore::StringFormat("{}:{}:{}:{}:{}:{}:{};", e->firstSpellId, uint32(e->rarity),
                 sClasslessMgr->AbilityCost(*e), st.abilities.count(e->firstSpellId) ? 1 : 0, e->passive ? 1 : 0,
                 level(e), uint32(e->type));
@@ -323,7 +351,11 @@ namespace
                 && (!levelOnly || heroLevel >= 10u + uint32(t.row) * 5u))
             {
                 SpellInfo const* info = sSpellMgr->GetSpellInfo(t.rankSpells[0]);
-                list.push_back({ &t, info && info->SpellName[0] ? info->SpellName[0] : "",
+                LocaleConstant locale = player->GetSession()->GetSessionDbcLocale();
+                char const* name = info ? info->SpellName[locale] : nullptr;
+                if (!name || !*name)
+                    name = info ? info->SpellName[LOCALE_enUS] : nullptr;
+                list.push_back({ &t, name ? name : "",
                                  info && !info->IsPassive() });
             }
         auto tree = [](Row const& a, Row const& b)
@@ -337,9 +369,11 @@ namespace
                 case SORT_LEVEL_DESC:
                     return a.t->row != b.t->row ? a.t->row > b.t->row : a.t->col < b.t->col;
                 case SORT_NAME_ASC:
-                    return a.name != b.name ? a.name < b.name : tree(a, b);
+                    return Unicode::CaseInsensitiveLess(a.name, b.name)
+                        ? true : Unicode::CaseInsensitiveLess(b.name, a.name) ? false : tree(a, b);
                 case SORT_NAME_DESC:
-                    return a.name != b.name ? a.name > b.name : tree(a, b);
+                    return Unicode::CaseInsensitiveLess(b.name, a.name)
+                        ? true : Unicode::CaseInsensitiveLess(a.name, b.name) ? false : tree(a, b);
                 case SORT_TYPE:
                     return a.active != b.active ? a.active : tree(a, b);
                 default:
@@ -766,9 +800,37 @@ namespace
         for (auto const& [id, arch] : sClasslessMgr->Archetypes())
         {
             uint32 const ranks = arch.TalentRanks();
-            SendAddon(player, Acore::StringFormat("AR|{}|{}|{}|{}|{}|{}",
-                id, SanitizeText(arch.name), SanitizeText(arch.description),
-                uint32(arch.abilities.size()), ranks, st.archetype == id ? 1 : 0));
+            std::string const name = SanitizeText(sClasslessMgr->ArchetypeName(id, player));
+            std::string const description = SanitizeText(sClasslessMgr->ArchetypeDescription(id, player));
+            uint32 const following = st.archetype == id ? 1 : 0;
+            std::string const row = Acore::StringFormat("AR|{}|{}|{}|{}|{}|{}",
+                id, name, description, uint32(arch.abilities.size()), ranks, following);
+            if (row.size() <= MAX_BODY)
+            {
+                SendAddon(player, row);
+                continue;
+            }
+
+            // ARF has at most a 32-byte header even with uint32 ids and
+            // indexes. The conservative chunk size keeps every body within
+            // MAX_BODY and SplitUtf8 leaves each UTF-8 codepoint intact.
+            constexpr size_t ARCH_TEXT_PIECE = MAX_BODY - 32;
+            std::vector<std::string> const nameParts = SplitUtf8(name, ARCH_TEXT_PIECE);
+            std::vector<std::string> const descParts = SplitUtf8(description, ARCH_TEXT_PIECE);
+            SendAddon(player, Acore::StringFormat("ARS|{}|{}|{}|{}|{}|{}",
+                id, uint32(arch.abilities.size()), ranks, following,
+                nameParts.size(), descParts.size()));
+            auto sendParts = [&](char const* field, std::vector<std::string> const& parts)
+            {
+                for (size_t i = 0; i < parts.size(); ++i)
+                {
+                    std::string const body = Acore::StringFormat("ARF|{}|{}|{}|{}", id, field, i + 1, parts[i]);
+                    if (body.size() <= MAX_BODY)
+                        SendAddon(player, body);
+                }
+            };
+            sendParts("N", nameParts);
+            sendParts("D", descParts);
         }
         SendAddon(player, "ARE|");
     }
@@ -1050,7 +1112,7 @@ namespace
                 return;
             }
             std::string problem;
-            sClasslessMgr->ValidateCustomArchetype(arch, &problem);
+            sClasslessMgr->ValidateCustomArchetype(player, arch, &problem);
             SendPlan(player, 0, arch, problem);
         }
         else if (cmd == "ARCHMINE")
@@ -1130,7 +1192,8 @@ namespace
                 // 255 either), so the page can say who may start it; field 12:
                 // the Vengeance it asks for besides the level cap (0 none)
                 SendAddon(player, Acore::StringFormat("CH|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-                    uint32(ch.id), ch.name, uint32(ch.lives), ch.rewardGold, sClasslessMgr->ChallengeText(ch.rule),
+                    uint32(ch.id), sClasslessMgr->ChallengeName(ch, player), uint32(ch.lives), ch.rewardGold,
+                    sClasslessMgr->ChallengeText(ch.rule, player),
                     best != st.runBest.end() ? uint32(best->second.first) : 0u,
                     best != st.runBest.end() && best->second.second ? 1 : 0, reward, title,
                     uint32(ch.path),
@@ -1144,7 +1207,7 @@ namespace
                 // layer might trim.
                 auto sendPieces = [&](char const* kind, char const* raw)
                 {
-                    std::string const text = SanitizeText(sClasslessMgr->ChallengeText(raw));
+                    std::string const text = SanitizeText(sClasslessMgr->ChallengeText(raw, player));
                     size_t pos = 0;
                     while (pos < text.size())
                     {

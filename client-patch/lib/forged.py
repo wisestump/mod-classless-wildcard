@@ -27,7 +27,7 @@ import os
 import struct
 
 from . import dbc
-from .elemental import (_add_string, _ids, _join, _split, append_skill_lines,
+from .elemental import (_add_string, _set_string, _ids, _join, _split, append_skill_lines,
                         append_spells)
 
 SKILLLINE = "DBFilesClient\\SkillLine.dbc"
@@ -56,6 +56,8 @@ SKILLRACECLASSINFO_FIELDS = 8
 # 38..53 AlternateVerb + 54 mask, 55 CanLink
 SL_NAME_FIRST, SL_NAME_MASK = 3, 19
 SL_ICON = 37
+LOCALE_ENUS = 0
+LOCALE_RURU = 8
 
 
 class ForgedError(Exception):
@@ -82,20 +84,24 @@ def append_skill_line(data: bytes, line: dict):
     """The Hero line. Returns (bytes, added)."""
     count, fields, rec, records, strings = _split(data, SKILLLINE_FIELDS, "SkillLine.dbc")
     ids = _ids(records, rec, count)
-    if line["id"] in ids:
-        return _join(count, fields, rec, records, strings), 0
-
-    row = bytearray(rec)
+    exists = line["id"] in ids
+    row_index = ids.get(line["id"])
+    row = bytearray(records[row_index * rec:(row_index + 1) * rec]) if exists else bytearray(rec)
     struct.pack_into("<I", row, 0, line["id"])
     struct.pack_into("<I", row, 1 * 4, line["category"])
     struct.pack_into("<I", row, SL_ICON * 4, line["icon"])
-    # the same name in every locale column, so a client of any locale reads it
-    off = _add_string(strings, line["name"])
-    for col in range(SL_NAME_FIRST, SL_NAME_MASK):
-        struct.pack_into("<I", row, col * 4, off)
-    struct.pack_into("<I", row, SL_NAME_MASK * 4, 0xFF)
-    records += row
-    return _join(count + 1, fields, rec, records, strings), 1
+    _set_string(strings, row, SL_NAME_FIRST, line["name"])
+    ru_name = line.get("ruRU", "")
+    if ru_name:
+        _set_string(strings, row, SL_NAME_FIRST + LOCALE_RURU, ru_name)
+    if not exists:
+        struct.pack_into("<I", row, SL_NAME_MASK * 4, 0xFF)
+    if not exists:
+        records += row
+        return _join(count + 1, fields, rec, records, strings), 1
+    start = row_index * rec
+    records[start:start + rec] = row
+    return _join(count, fields, rec, records, strings), 0
 
 
 def append_char_titles(data: bytes, titles):
@@ -109,22 +115,29 @@ def append_char_titles(data: bytes, titles):
     ids = _ids(records, rec, count)
     added = skipped = 0
     for t in titles:
-        if t["id"] in ids:
-            skipped += 1
-            continue
-        row = bytearray(rec)
+        exists = t["id"] in ids
+        row_index = ids.get(t["id"])
+        row = bytearray(records[row_index * rec:(row_index + 1) * rec]) if exists else bytearray(rec)
         struct.pack_into("<I", row, 0, t["id"])
-        off = _add_string(strings, t["name"])
-        for col in range(CT_MALE_FIRST, CT_MALE_MASK):
-            struct.pack_into("<I", row, col * 4, off)
-        struct.pack_into("<I", row, CT_MALE_MASK * 4, 0xFF)
-        for col in range(CT_FEMALE_FIRST, CT_FEMALE_MASK):
-            struct.pack_into("<I", row, col * 4, off)
-        struct.pack_into("<I", row, CT_FEMALE_MASK * 4, 0xFF)
+        _set_string(strings, row, CT_MALE_FIRST, t["name"])
+        _set_string(strings, row, CT_FEMALE_FIRST, t["name"])
+        ru_names = t.get("ruRU", {})
+        for col, value in ((CT_MALE_FIRST + LOCALE_RURU, ru_names.get("male", "")),
+                           (CT_FEMALE_FIRST + LOCALE_RURU, ru_names.get("female", ""))):
+            if value:
+                _set_string(strings, row, col, value)
+        if not exists:
+            struct.pack_into("<I", row, CT_MALE_MASK * 4, 0xFF)
+            struct.pack_into("<I", row, CT_FEMALE_MASK * 4, 0xFF)
         struct.pack_into("<I", row, CT_BIT * 4, t["bit"])
-        records += row
-        ids[t["id"]] = count + added   # _ids is id -> row index
-        added += 1
+        if exists:
+            start = row_index * rec
+            records[start:start + rec] = row
+            skipped += 1
+        else:
+            records += row
+            ids[t["id"]] = count + added   # _ids is id -> row index
+            added += 1
     return _join(count + added, fields, rec, records, strings), added, skipped
 
 

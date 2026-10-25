@@ -14,6 +14,7 @@
  */
 
 #include "ClasslessMgr.h"
+#include "ClasslessLocale.h"
 #include "Chat.h"
 #include "Config.h"
 #include "Creature.h"
@@ -51,12 +52,69 @@ namespace
 {
     constexpr char MSG_PREFIX[] = "|cff00ccff[Classless]|r ";
 
-    std::string SpellName(uint32 spellId)
+    char const* SpellNameWithFallback(SpellInfo const* info, LocaleConstant preferredLocale)
+    {
+        if (!info)
+            return "";
+
+        auto nameAt = [info](LocaleConstant locale) -> char const*
+        {
+            char const* name = info->SpellName[locale];
+            return name && *name ? name : "";
+        };
+
+        if (char const* name = nameAt(preferredLocale); *name)
+            return name;
+        if (preferredLocale != LOCALE_enUS)
+            if (char const* name = nameAt(LOCALE_enUS); *name)
+                return name;
+
+        LocaleConstant const defaultLocale = sWorld->GetDefaultDbcLocale();
+        if (defaultLocale != preferredLocale && defaultLocale != LOCALE_enUS)
+            if (char const* name = nameAt(defaultLocale); *name)
+                return name;
+
+        for (uint8 locale = 0; locale < TOTAL_LOCALES; ++locale)
+            if (char const* name = nameAt(LocaleConstant(locale)); *name)
+                return name;
+
+        return "";
+    }
+
+    char const* StableSpellName(SpellInfo const* info)
+    {
+        return SpellNameWithFallback(info, LOCALE_enUS);
+    }
+
+    bool HasSpellName(SpellInfo const* info)
+    {
+        return *StableSpellName(info) != '\0';
+    }
+
+    std::string CreatureNameFor(Player* player, uint32 entry)
+    {
+        CreatureTemplate const* creature = sObjectMgr->GetCreatureTemplate(entry);
+        if (!creature)
+            return "Unknown";
+
+        std::string name = creature->Name;
+        if (player && player->GetSession())
+            if (CreatureLocale const* locale = sObjectMgr->GetCreatureLocale(entry))
+                ObjectMgr::GetLocaleString(locale->Name,
+                    player->GetSession()->GetSessionDbLocaleIndex(), name);
+        return name;
+    }
+
+    std::string SpellName(uint32 spellId, Player* player = nullptr)
     {
         if (SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId))
-            if (info->SpellName[0])
-                return info->SpellName[0];
-        return "Unknown";
+        {
+            LocaleConstant locale = player && player->GetSession()
+                ? player->GetSession()->GetSessionDbcLocale() : LOCALE_enUS;
+            if (char const* name = SpellNameWithFallback(info, locale); *name)
+                return name;
+        }
+        return LocaleText(player, "Unknown", "Неизвестно");
     }
 
     void Msg(Player* player, std::string const& text)
@@ -126,16 +184,16 @@ namespace
 
 }
 
-char const* ClasslessWildcard::RarityName(Rarity r)
+std::string ClasslessWildcard::RarityName(Rarity r, Player* player)
 {
     switch (r)
     {
-        case Rarity::Common:    return "Common";
-        case Rarity::Uncommon:  return "Uncommon";
-        case Rarity::Rare:      return "Rare";
-        case Rarity::Epic:      return "Epic";
-        case Rarity::Legendary: return "Legendary";
-        default:                return "Unknown";
+        case Rarity::Common:    return LocaleText(player, "Common", "Обычная");
+        case Rarity::Uncommon:  return LocaleText(player, "Uncommon", "Необычная");
+        case Rarity::Rare:      return LocaleText(player, "Rare", "Редкая");
+        case Rarity::Epic:      return LocaleText(player, "Epic", "Эпическая");
+        case Rarity::Legendary: return LocaleText(player, "Legendary", "Легендарная");
+        default:                return LocaleText(player, "Unknown", "Неизвестная");
     }
 }
 
@@ -734,7 +792,7 @@ void ClasslessMgr::BuildLibrary()
                 || sla->AcquireMethod == SKILL_LINE_ABILITY_LEARNED_ON_SKILL_LEARN))
             _skillLearnedClassSpells.insert(sla->Spell);
 
-        if (!info || !info->SpellName[0] || !*info->SpellName[0])
+        if (!HasSpellName(info))
             continue;
         if (GetTalentSpellCost(sla->Spell)) // talent spells live in the talent pool
             continue;
@@ -859,8 +917,8 @@ void ClasslessMgr::BuildLibrary()
         }
 
         SpellInfo const* firstInfo = sSpellMgr->GetSpellInfo(e.firstSpellId);
-        if (firstInfo && firstInfo->SpellName[0])
-            e.name = firstInfo->SpellName[0];
+        if (firstInfo)
+            e.name = StableSpellName(firstInfo);
         e.type = ClassifyAbility(firstInfo, e.passive);
 
         // no talent row yet -- talents load later, and the re-gate pass below
@@ -1396,8 +1454,10 @@ void ClasslessMgr::GrantRequiredForm(Player* player, uint32 spellId, bool announ
             auto t = _talents.find(talentId);
             if (t == _talents.end() || !t->second.rankSpells[0])
                 return;
-            Msg(player, Acore::StringFormat("{} can only be used in {}, which comes from a talent.",
-                SpellName(spellId), SpellName(t->second.rankSpells[0])));
+            Msg(player, Acore::StringFormat(LocaleText(player,
+                "{} can only be used in {}, which comes from a talent.",
+                "«{}» можно использовать только в форме «{}», которую даёт талант."),
+                SpellName(spellId, player), SpellName(t->second.rankSpells[0], player)));
             return;
         }
         return;
@@ -1418,8 +1478,9 @@ void ClasslessMgr::GrantRequiredForm(Player* player, uint32 spellId, bool announ
     GrantGuard guard(_grantingKit);
     GrantAbilityInternal(player, *formEntry, GrantSource::Companion, true, false);
     if (!_revealSuppress)
-        Msg(player, Acore::StringFormat("{} can only be used in {}, so that comes with it.",
-            SpellName(spellId), SpellName(best)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "{} can only be used in {}, so that comes with it.",
+            "«{}» можно использовать только в форме «{}», поэтому форма получена вместе со способностью."),
+            SpellName(spellId, player), SpellName(best, player)));
 }
 
 uint32 ClasslessMgr::MissingFormSpell(uint32 spellId, std::function<bool(uint32)> const& knows,
@@ -1546,7 +1607,9 @@ void ClasslessMgr::LoadForgedSpells()
         AbilityEntry e;
         e.firstSpellId = firstSpell;
         e.passive = firstInfo->IsPassive();
-        e.name = firstInfo->SpellName[0] ? firstInfo->SpellName[0] : recipe;
+        e.name = StableSpellName(firstInfo);
+        if (e.name.empty())
+            e.name = recipe;
         // ClassifyAbility reads DmgClass, which these inherit from a donor, and
         // calls anything with a heal effect a Heal. Both are right for a class
         // spell and wrong here: Emberfeed is a nuke that feeds you, and Hurl is
@@ -1633,7 +1696,8 @@ void ClasslessMgr::LoadVariants()
     {
         Field* f = result->Fetch();
         uint32 const variantFirst = f[0].Get<uint32>();
-        uint32 baseFirst = f[1].Get<uint32>();
+        uint32 const sourceBaseFirst = f[1].Get<uint32>();
+        uint32 baseFirst = sourceBaseFirst;
 
         // The generator writes the first rank it copied. For a talent-taught
         // strike (Mortal Strike, Devastate, Mangle, Aimed Shot, Hemorrhage)
@@ -1704,8 +1768,8 @@ void ClasslessMgr::LoadVariants()
                 e.rankLevels[ri] = e.rankLevels[ri - 1];
 
         SpellInfo const* firstInfo = sSpellMgr->GetSpellInfo(variantFirst);
-        if (firstInfo && firstInfo->SpellName[0])
-            e.name = firstInfo->SpellName[0];
+        if (firstInfo)
+            e.name = StableSpellName(firstInfo);
         e.type = ClassifyAbility(firstInfo, false);
 
         e.classMask = base.classMask;
@@ -1909,25 +1973,62 @@ void ClasslessMgr::LoadArchetypes()
         _archetypes[arch.id] = arch;
     } while (result->NextRow());
 
+    if (WorldDatabase.Query("SHOW TABLES LIKE 'cw_archetypes_locale'"))
+    {
+        QueryResult localized = WorldDatabase.Query(
+            "SELECT archetype_id, locale, name, description FROM cw_archetypes_locale ORDER BY archetype_id, locale");
+        if (localized)
+            do
+            {
+                Field* f = localized->Fetch();
+                if (f[1].Get<std::string>() != "ruRU")
+                    continue;
+                auto itr = _archetypes.find(f[0].Get<uint32>());
+                if (itr == _archetypes.end())
+                    continue;
+                itr->second.nameRu = f[2].Get<std::string>();
+                itr->second.descriptionRu = f[3].Get<std::string>();
+            } while (localized->NextRow());
+    }
+
     LOG_INFO("module", "mod-classless-wildcard: loaded {} archetypes.", _archetypes.size());
 }
 
-std::string ClasslessMgr::SpellNameOf(uint32 spellId) const
+std::string ClasslessMgr::SpellNameOf(uint32 spellId, Player* player) const
 {
-    return SpellName(spellId);
+    return SpellName(spellId, player);
 }
 
-std::string ClasslessMgr::ArchetypeName(uint32 archetypeId) const
+std::string ClasslessMgr::LocalizedCreatureName(Player* player, uint32 entry) const
+{
+    return CreatureNameFor(player, entry);
+}
+
+std::string ClasslessMgr::ArchetypeName(uint32 archetypeId, Player* player) const
 {
     auto itr = _archetypes.find(archetypeId);
-    return itr == _archetypes.end() ? std::string("an archetype") : itr->second.name;
+    if (itr == _archetypes.end())
+        return LocaleText(player, "an archetype", "архетип");
+    if (IsRussian(player) && !itr->second.nameRu.empty())
+        return itr->second.nameRu;
+    return itr->second.name;
 }
 
-std::string ClasslessMgr::ArchetypeName(CharState const& st) const
+std::string ClasslessMgr::ArchetypeDescription(uint32 archetypeId, Player* player) const
+{
+    auto itr = _archetypes.find(archetypeId);
+    if (itr == _archetypes.end())
+        return {};
+    if (IsRussian(player) && !itr->second.descriptionRu.empty())
+        return itr->second.descriptionRu;
+    return itr->second.description;
+}
+
+std::string ClasslessMgr::ArchetypeName(CharState const& st, Player* player) const
 {
     if (st.archetype == CUSTOM_ARCHETYPE)
-        return st.custom.name.empty() ? std::string("your own build") : st.custom.name;
-    return ArchetypeName(st.archetype);
+        return st.custom.name.empty() ? LocaleText(player, "your own build", "ваша собственная сборка") : st.custom.name;
+    return ArchetypeName(st.archetype, player);
 }
 
 Archetype const* ClasslessMgr::FindArchetype(CharState const& st, uint32 id) const
@@ -1953,7 +2054,7 @@ bool ClasslessMgr::ApplyArchetype(Player* player, uint32 archetypeId, std::strin
     CharState& st = GetState(player);
     if (st.mode != Mode::Classless)
     {
-        if (err) *err = "Archetypes are build templates for the Classless path.";
+        if (err) *err = LocaleText(player, "Archetypes are build templates for the Classless path.", "Архетипы доступны только на свободном пути.");
         return false;
     }
 
@@ -1961,13 +2062,15 @@ bool ClasslessMgr::ApplyArchetype(Player* player, uint32 archetypeId, std::strin
     {
         if (!st.archetype)
         {
-            if (err) *err = "You are not following an archetype.";
+            if (err) *err = LocaleText(player, "You are not following an archetype.", "Вы не следуете архетипу.");
             return false;
         }
-        std::string name = ArchetypeName(st);
+        std::string name = ArchetypeName(st, player);
         st.archetype = 0;
         SaveState(player);
-        Msg(player, Acore::StringFormat("You no longer follow |cffffff00{}|r. Everything you own stays; from here you buy your own abilities and talents.", name));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "You no longer follow |cffffff00{}|r. Everything you own stays; from here you buy your own abilities and talents.",
+            "Вы больше не следуете архетипу |cffffff00{}|r. Всё изученное останется; теперь вы сами выбираете способности и таланты."), name));
         return true;
     }
 
@@ -1975,7 +2078,7 @@ bool ClasslessMgr::ApplyArchetype(Player* player, uint32 archetypeId, std::strin
     // checks it first; this path takes the starter builds only.
     if (archetypeId == CUSTOM_ARCHETYPE || !_archetypes.count(archetypeId))
     {
-        if (err) *err = "Unknown archetype.";
+        if (err) *err = LocaleText(player, "Unknown archetype.", "Неизвестный архетип.");
         return false;
     }
     return SwitchToArchetype(player, archetypeId, err);
@@ -1994,7 +2097,8 @@ bool ClasslessMgr::SwitchToArchetype(Player* player, uint32 archetypeId, std::st
         std::string why;
         if (!Respec(player, &why))
         {
-            if (err) *err = "Following a new archetype resets your talents. " + why;
+            if (err) *err = LocaleText(player, "Following a new archetype resets your talents. ",
+                                       "Переход к новому архетипу сбросит таланты. ") + LocaleError(player, why);
             return false;
         }
     }
@@ -2023,18 +2127,24 @@ bool ClasslessMgr::SwitchToArchetype(Player* player, uint32 archetypeId, std::st
     SaveState(player);
 
     FollowResult got = FollowArchetype(player);
-    std::string line = Acore::StringFormat("You now follow |cffffff00{}|r. Bought now: {} abilities, {} talent ranks.",
-        ArchetypeName(st), got.abilities, got.talentRanks);
+    std::string line = Acore::StringFormat(LocaleText(player,
+        "You now follow |cffffff00{}|r. Bought now: {} abilities, {} talent ranks.",
+        "Теперь вы следуете архетипу |cffffff00{}|r. Сейчас изучено способностей: {}, рангов талантов: {}."),
+        ArchetypeName(st, player), got.abilities, got.talentRanks);
     auto queue = ArchetypeQueue(player);
     if (!queue.empty())
     {
         auto const& [firstSpell, unlock] = queue.front();
         if (unlock > player->GetLevel())
-            line += Acore::StringFormat(" Next: {} at level {}.", SpellName(firstSpell), uint32(unlock));
+            line += Acore::StringFormat(LocaleText(player, " Next: {} at level {}.", " Далее: {} на {} уровне."),
+                                        SpellName(firstSpell, player), uint32(unlock));
         else
-            line += Acore::StringFormat(" Next: {}, as soon as you have the Ability Essence.", SpellName(firstSpell));
+            line += Acore::StringFormat(LocaleText(player, " Next: {}, as soon as you have the Ability Essence.",
+                " Далее: {}; изучите, когда накопите эссенцию способностей."), SpellName(firstSpell, player));
     }
-    Msg(player, line + Acore::StringFormat(" Ability Essence left: |cff00ff00{}|r, Talent Essence left: |cff00ff00{}|r.",
+    Msg(player, line + Acore::StringFormat(LocaleText(player,
+        " Ability Essence left: |cff00ff00{}|r, Talent Essence left: |cff00ff00{}|r.",
+        " Осталось эссенции способностей: |cff00ff00{}|r, эссенции талантов: |cff00ff00{}|r."),
         st.abilityEssence, st.talentEssence));
     return true;
 }
@@ -2060,11 +2170,22 @@ namespace
         if (out.size() > CUSTOM_ARCHETYPE_NAME_MAX)
         {
             out.resize(CUSTOM_ARCHETYPE_NAME_MAX);
-            // never leave half a UTF-8 character at the end
-            while (!out.empty() && (static_cast<unsigned char>(out.back()) & 0xC0) == 0x80)
-                out.pop_back();
-            if (!out.empty() && (static_cast<unsigned char>(out.back()) & 0x80))
-                out.pop_back();
+            // Keep a complete codepoint when the byte cap lands just after
+            // it; remove only a suffix that actually ends inside a sequence.
+            size_t sequenceStart = out.size() - 1;
+            while (sequenceStart > 0
+                && (static_cast<unsigned char>(out[sequenceStart]) & 0xC0) == 0x80)
+                --sequenceStart;
+
+            unsigned char const lead = static_cast<unsigned char>(out[sequenceStart]);
+            size_t expected = lead < 0x80 ? 1
+                : (lead >= 0xC2 && lead <= 0xDF) ? 2
+                : (lead >= 0xE0 && lead <= 0xEF) ? 3
+                : (lead >= 0xF0 && lead <= 0xF4) ? 4
+                : 0;
+            size_t const actual = out.size() - sequenceStart;
+            if (expected == 0 || actual < expected)
+                out.resize(sequenceStart);
         }
         return out;
     }
@@ -2098,18 +2219,20 @@ ClasslessMgr::PlanBudget ClasslessMgr::BudgetOf(Archetype const& arch) const
     return b;
 }
 
-bool ClasslessMgr::ValidateCustomArchetype(Archetype& arch, std::string* err)
+bool ClasslessMgr::ValidateCustomArchetype(Player* player, Archetype& arch, std::string* err)
 {
     auto fail = [err](std::string const& why) { if (err) *err = why; return false; };
 
     arch.name = CleanBuildName(arch.name);
     if (arch.name.empty())
-        return fail("Give the build a name.");
+        return fail(LocaleText(player, "Give the build a name.", "Укажите название сборки."));
     if (arch.abilities.empty() && arch.talents.empty())
-        return fail("The build has nothing in it.");
+        return fail(LocaleText(player, "The build has nothing in it.", "В сборке нет способностей и талантов."));
     if (arch.abilities.size() > CUSTOM_ARCHETYPE_MAX || arch.talents.size() > CUSTOM_ARCHETYPE_MAX)
-        return fail(Acore::StringFormat("A build can list at most {} abilities and {} talents.",
-                                        CUSTOM_ARCHETYPE_MAX, CUSTOM_ARCHETYPE_MAX));
+        return fail(Acore::StringFormat(LocaleText(player,
+            "A build can list at most {} abilities and {} talents.",
+            "Сборка может содержать не более {} способностей и {} талантов."),
+            CUSTOM_ARCHETYPE_MAX, CUSTOM_ARCHETYPE_MAX));
 
     // Abilities: each one a player could buy here, each once.
     std::set<uint32> seen;
@@ -2117,23 +2240,28 @@ bool ClasslessMgr::ValidateCustomArchetype(Archetype& arch, std::string* err)
     {
         AbilityEntry const* e = GetAbility(firstSpell);
         if (!e || !e->enabled || (e->variant && !cfg.elementalInPool))
-            return fail(Acore::StringFormat("{} cannot be bought on this realm.",
-                        sSpellMgr->GetSpellInfo(firstSpell) ? SpellName(firstSpell) : std::string("An ability in the build")));
+            return fail(Acore::StringFormat(LocaleText(player, "{} cannot be bought on this realm.",
+                "Способность «{}» недоступна для покупки на этом игровом мире."),
+                sSpellMgr->GetSpellInfo(firstSpell) ? SpellName(firstSpell, player) : LocaleText(player,
+                    "An ability in the build", "Способность из сборки")));
         if (!seen.insert(firstSpell).second)
-            return fail(Acore::StringFormat("{} is in the build twice.", SpellName(firstSpell)));
+            return fail(Acore::StringFormat(LocaleText(player, "{} is in the build twice.", "«{}» указано в сборке дважды."),
+                                            SpellName(firstSpell, player)));
     }
 
     // A level an entry is held back to has to be one a Hero can reach.
     uint32 const cap = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
     for (size_t i = 0; i < arch.abilities.size(); ++i)
         if (arch.AbilityWait(i) > cap)
-            return fail(Acore::StringFormat("{} is set for level {}, past the level cap of {}.",
-                        SpellName(arch.abilities[i]), uint32(arch.AbilityWait(i)), cap));
+            return fail(Acore::StringFormat(LocaleText(player, "{} is set for level {}, past the level cap of {}.",
+                        "Для «{}» задан {} уровень, превышающий ограничение в {}."),
+                        SpellName(arch.abilities[i], player), uint32(arch.AbilityWait(i)), cap));
     for (size_t i = 0; i < arch.talents.size(); ++i)
         if (arch.TalentWait(i) > cap)
             if (TalentPoolEntry const* t = GetTalent(arch.talents[i].first))
-                return fail(Acore::StringFormat("{} is set for level {}, past the level cap of {}.",
-                            SpellName(t->rankSpells[0]), uint32(arch.TalentWait(i)), cap));
+                return fail(Acore::StringFormat(LocaleText(player, "{} is set for level {}, past the level cap of {}.",
+                            "Для «{}» задан {} уровень, превышающий ограничение в {}."),
+                            SpellName(t->rankSpells[0], player), uint32(arch.TalentWait(i)), cap));
 
     // Talents: each once, within its ranks, after whatever it needs.
     std::map<uint32, uint8> placed;   // talent -> rank, as the plan has it so far
@@ -2141,16 +2269,19 @@ bool ClasslessMgr::ValidateCustomArchetype(Archetype& arch, std::string* err)
     {
         TalentPoolEntry const* t = GetTalent(talentId);
         if (!t || !t->enabled)
-            return fail("A talent in the build is not on this realm.");
-        std::string const name = SpellName(t->rankSpells[0]);
+            return fail(LocaleText(player, "A talent in the build is not on this realm.",
+                                   "Один из талантов сборки недоступен на этом игровом мире."));
+        std::string const name = SpellName(t->rankSpells[0], player);
         if (!rank || rank > t->maxRank)
-            return fail(Acore::StringFormat("{} has {} ranks, not {}.", name, uint32(t->maxRank), uint32(rank)));
+            return fail(Acore::StringFormat(LocaleText(player, "{} has {} ranks, not {}.",
+                "У таланта «{}» {} ранга, а в сборке задано {}."), name, uint32(t->maxRank), uint32(rank)));
         // A talent comes back once for each rank bought at a level of its
         // own: every time it appears, it is for a higher rank than before.
         if (auto prev = placed.find(talentId); prev != placed.end())
         {
             if (rank <= prev->second)
-                return fail(Acore::StringFormat("{} rank {} is in the build twice.", name, uint32(rank)));
+                return fail(Acore::StringFormat(LocaleText(player, "{} rank {} is in the build twice.",
+                    "Ранг {} {} указан в сборке дважды."), name, uint32(rank)));
             placed[talentId] = rank;
             continue;
         }
@@ -2161,22 +2292,27 @@ bool ClasslessMgr::ValidateCustomArchetype(Archetype& arch, std::string* err)
     // Rebirth bonus, so a build that is valid here is valid for anyone.
     PlanBudget const b = BudgetOf(arch);
     if (b.spentA > b.totalA)
-        return fail(Acore::StringFormat("The build costs {} Ability Essence. A Hero earns {} by level {}.",
+        return fail(Acore::StringFormat(LocaleText(player, "The build costs {} Ability Essence. A Hero earns {} by level {}.",
+                    "Сборка требует {} эссенции способностей, а Герой получает {} к {} уровню."),
                     b.spentA, b.totalA, sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)));
     if (b.spentT > b.totalT)
-        return fail(Acore::StringFormat("The build costs {} Talent Essence. A Hero earns {} by level {}.",
+        return fail(Acore::StringFormat(LocaleText(player, "The build costs {} Talent Essence. A Hero earns {} by level {}.",
+                    "Сборка требует {} эссенции талантов, а Герой получает {} к {} уровню."),
                     b.spentT, b.totalT, sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)));
     // Order can still leave a step unreached (an early ability waits for one
     // that unlocks late), so the simulation has the last word.
     ArchetypePlan const plan = PlanArchetype(arch, 0);
     for (PlanStep const& s : plan.abilities)
         if (!s.level)
-            return fail(Acore::StringFormat("{} would never be bought in this order by level {}. Move it, or "
-                        "what waits in front of it, earlier.", SpellName(s.spell), sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)));
+            return fail(Acore::StringFormat(LocaleText(player,
+                        "{} would never be bought in this order by level {}. Move it, or what waits in front of it, earlier.",
+                        "«{}» не будет изучено в этом порядке до {} уровня. Переместите его или предшествующие способности выше в списке."),
+                        SpellName(s.spell, player), sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)));
     for (PlanStep const& s : plan.talents)
         if (!s.level)
-            return fail(Acore::StringFormat("{} would never be bought in this order by level {}.",
-                        SpellName(s.spell), sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)));
+            return fail(Acore::StringFormat(LocaleText(player, "{} would never be bought in this order by level {}.",
+                        "«{}» не будет изучено в этом порядке до {} уровня."),
+                        SpellName(s.spell, player), sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)));
     // Each entry has a level of its own: the level it becomes available at,
     // or the later one the build holds it back to. The essence a Hero earns
     // has to cover it there, with everything set at or before it; a build
@@ -2189,8 +2325,10 @@ bool ClasslessMgr::ValidateCustomArchetype(Archetype& arch, std::string* err)
         uint8 const unlock = (cfg.respectLevelReqs && e && !e->rankLevels.empty()) ? e->rankLevels[0] : 1;
         uint8 const at = std::max<uint8>(unlock, arch.AbilityWait(i));
         if (!s.free && s.level > at)
-            return fail(Acore::StringFormat("{} is set for level {}, but a Hero has the essence for it only at "
-                        "level {}. Set it, or an entry before it, later.", SpellName(s.spell), uint32(at),
+            return fail(Acore::StringFormat(LocaleText(player,
+                        "{} is set for level {}, but a Hero has the essence for it only at level {}. Set it, or an entry before it, later.",
+                        "Для «{}» задан {} уровень, но Герой накопит нужную эссенцию только к {} уровню. Укажите более поздний уровень для этой или предыдущей записи."),
+                        SpellName(s.spell, player), uint32(at),
                         uint32(s.level)));
     }
     for (size_t i = 0; i < plan.talents.size() && i < arch.talents.size(); ++i)
@@ -2200,8 +2338,10 @@ bool ClasslessMgr::ValidateCustomArchetype(Archetype& arch, std::string* err)
         uint8 const tier = (cfg.respectLevelReqs && t) ? uint8(10 + t->row * 5) : 1;
         uint8 const at = std::max<uint8>(tier, arch.TalentWait(i));
         if (s.level > at)
-            return fail(Acore::StringFormat("{} is set for level {}, but a Hero has the essence for it only at "
-                        "level {}. Set it, or an entry before it, later.", SpellName(s.spell), uint32(at),
+            return fail(Acore::StringFormat(LocaleText(player,
+                        "{} is set for level {}, but a Hero has the essence for it only at level {}. Set it, or an entry before it, later.",
+                        "Для «{}» задан {} уровень, но Герой накопит нужную эссенцию только к {} уровню. Укажите более поздний уровень для этой или предыдущей записи."),
+                        SpellName(s.spell, player), uint32(at),
                         uint32(s.level)));
     }
     return true;
@@ -2301,15 +2441,15 @@ bool ClasslessMgr::ApplyCustomArchetype(Player* player, Archetype arch, std::str
     CharState& st = GetState(player);
     if (st.mode != Mode::Classless)
     {
-        if (err) *err = "Archetypes are build templates for the Classless path.";
+        if (err) *err = LocaleText(player, "Archetypes are build templates for the Classless path.", "Архетипы доступны только на свободном пути.");
         return false;
     }
-    if (!ValidateCustomArchetype(arch, err))
+    if (!ValidateCustomArchetype(player, arch, err))
         return false;
     // Taken over before the switch: the refund and reset only look at what is
     // owned, and the message the switch prints names the new build.
     arch.id = CUSTOM_ARCHETYPE;
-    std::string const was = st.archetype ? ArchetypeName(st) : std::string();
+    std::string const was = st.archetype ? ArchetypeName(st, player) : std::string();
     st.custom = std::move(arch);
     SaveCustomArchetype(player, st.custom);
     if (!was.empty())
@@ -2401,11 +2541,11 @@ ClasslessMgr::FollowResult ClasslessMgr::FollowArchetype(Player* player)
             break;                                  // the build holds it for later
         if (!BuyAbility(player, firstSpell, nullptr))
         {
-            out.stalled.push_back(SpellName(firstSpell));
+            out.stalled.push_back(SpellName(firstSpell, player));
             break;                                  // waits for essence
         }
         ++out.abilities;
-        out.learned.push_back(SpellName(firstSpell));
+        out.learned.push_back(SpellName(firstSpell, player));
     }
 
     // Talents strictly in plan order. The plan is written tier by tier, so
@@ -2686,17 +2826,21 @@ namespace
         std::vector<uint8> slots;
         for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
             slots.push_back(slot);
-        return UnequipToBags(player, slots, "Rebirth",
-            "Your bags were full when you were reborn. This was on your back.");
+        return UnequipToBags(player, slots,
+            LocaleText(player, "Rebirth", "Перерождение"),
+            LocaleText(player, "Your bags were full when you were reborn. This was on your back.",
+                "Ваши сумки были полны при перерождении. Эта вещь была на вас."));
     }
 
     // What a caller adds to its own message when gear did not fit.
-    std::string MailedNotice(uint32 mailed)
+    std::string MailedNotice(Player* player, uint32 mailed)
     {
         if (!mailed)
             return "";
+        if (IsRussian(player))
+            return Acore::StringFormat(" Отправлено по почте предметов снаряжения: {}.", mailed);
         return Acore::StringFormat(" Your bags were full, so {} piece{} of gear {} mailed to you.",
-                                   mailed, mailed == 1 ? "" : "s", mailed == 1 ? "was" : "were");
+            mailed, mailed == 1 ? "" : "s", mailed == 1 ? "was" : "were");
     }
 
     // The quest log forgotten: everything in progress dropped, everything
@@ -2973,23 +3117,25 @@ bool ClasslessMgr::Rebirth(Player* player, std::vector<uint32> const& heirlooms,
     CharState& st = GetState(player);
     if (!cfg.rebirthEnable)
     {
-        if (err) *err = "Rebirth is disabled on this realm.";
+        if (err) *err = LocaleText(player, "Rebirth is disabled on this realm.", "Перерождение отключено на этом игровом мире.");
         return false;
     }
     if (st.exempt)
     {
-        if (err) *err = "This character does not walk the Hero's path.";
+        if (err) *err = LocaleText(player, "This character does not walk the Hero's path.", "Этот персонаж не следует пути героя.");
         return false;
     }
     if (st.mode != Mode::Classless && st.mode != Mode::Wildcard)
     {
-        if (err) *err = "Choose your path first.";
+        if (err) *err = LocaleText(player, "Choose your path first.", "Сначала выберите путь.");
         return false;
     }
     if (!RebirthEligible(player))
     {
-        if (err) *err = Acore::StringFormat("Rebirth is for Heroes at level {}. Finish this life first.",
-                                            sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
+        if (err) *err = Acore::StringFormat(LocaleText(player,
+            "Rebirth is for Heroes at level {}. Finish this life first.",
+            "Перерождение доступно Героям на {} уровне. Сначала завершите эту жизнь."),
+            sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
         return false;
     }
 
@@ -3003,21 +3149,27 @@ bool ClasslessMgr::Rebirth(Player* player, std::vector<uint32> const& heirlooms,
         auto itr = st.abilities.find(id);
         if (itr == st.abilities.end())
         {
-            if (err) *err = "You can only carry an ability you own.";
+            if (err) *err = LocaleText(player, "You can only carry an ability you own.", "Можно сохранить только уже изученную способность.");
             return false;
         }
         if (itr->second.source == GrantSource::Companion || itr->second.source == GrantSource::Talent)
         {
-            if (err) *err = Acore::StringFormat("{} came with something else and cannot be carried on its own.",
-                                                SpellName(id));
+            if (err) *err = Acore::StringFormat(LocaleText(player,
+                "{} came with something else and cannot be carried on its own.",
+                "«{}» получена вместе с другой способностью и не может быть сохранена отдельно."), SpellName(id, player));
             return false;
         }
         keep.push_back(id);
     }
     if (keep.size() > MaxHeirlooms(st))
     {
-        if (err) *err = Acore::StringFormat("You may carry {} heirloom{} into this Rebirth.",
-                                            MaxHeirlooms(st), MaxHeirlooms(st) == 1 ? "" : "s");
+        if (err && IsRussian(player))
+            *err = Acore::StringFormat("При Перерождении можно сохранить: {} {}.", MaxHeirlooms(st),
+                LocaleCount(player, MaxHeirlooms(st), "heirloom", "heirlooms",
+                            "унаследованную способность", "унаследованные способности", "унаследованных способностей"));
+        else if (err)
+            *err = Acore::StringFormat("You may carry {} heirloom{} into this Rebirth.", MaxHeirlooms(st),
+                                       MaxHeirlooms(st) == 1 ? "" : "s");
         return false;
     }
 
@@ -3025,7 +3177,8 @@ bool ClasslessMgr::Rebirth(Player* player, std::vector<uint32> const& heirlooms,
     int32 const costCopper = int32(costGold) * GOLD;
     if (!player->HasEnoughMoney(costCopper))
     {
-        if (err) *err = Acore::StringFormat("Rebirth costs {} gold. You have {}.", costGold, player->GetMoney() / GOLD);
+        if (err) *err = Acore::StringFormat(LocaleText(player, "Rebirth costs {} gold. You have {}.",
+            "Перерождение стоит {} золотых. У вас есть {}."), costGold, player->GetMoney() / GOLD);
         return false;
     }
     player->ModifyMoney(-costCopper);
@@ -3122,26 +3275,34 @@ bool ClasslessMgr::Rebirth(Player* player, std::vector<uint32> const& heirlooms,
     std::string carriedIds;
     for (uint32 id : keep)
     {
-        carried.push_back(Acore::StringFormat("|cffff8800{}|r", SpellName(id)));
+        carried.push_back(Acore::StringFormat("|cffff8800{}|r", SpellName(id, player)));
         carriedIds += Acore::StringFormat("{}{}", carriedIds.empty() ? "" : ",", id);
     }
     std::string const titleText = TitleText(player, newTitle);
 
-    Msg(player, Acore::StringFormat("|cffff8800Rebirth {}.|r You begin a new life at level 1{}.",
-        st.rebirths, carried.empty() ? "" : ", carrying " + JoinNames(carried)));
-    Msg(player, Acore::StringFormat("Your rank grants |cff00ff00+{}%|r experience from kills and dungeons, "
-        "|cff00ff00+{}%|r from quests, exploration and battlegrounds, and |cff00ff00+{}%|r to every primary stat.",
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "|cffff8800Rebirth {}.|r You begin a new life at level 1{}.",
+        "|cffff8800Перерождение {}.|r Вы начинаете новую жизнь с 1 уровня{}."),
+        st.rebirths, carried.empty() ? "" : LocaleText(player, ", carrying ", ", сохранив способности: ") + JoinNames(carried)));
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "Your rank grants |cff00ff00+{}%|r experience from kills and dungeons, |cff00ff00+{}%|r from quests, exploration and battlegrounds, and |cff00ff00+{}%|r to every primary stat.",
+        "Ваш ранг увеличивает опыт за убийства и подземелья на |cff00ff00+{}%|r, опыт за задания, исследование мира и поля боя на |cff00ff00+{}%|r, а все основные характеристики на |cff00ff00+{}%|r."),
         killPct, otherPct, statPct));
     if (st.mode == Mode::Classless)
-        Msg(player, Acore::StringFormat("You start with |cff00ff00{}|r Ability Essence and |cff00ff00{}|r Talent Essence.",
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "You start with |cff00ff00{}|r Ability Essence and |cff00ff00{}|r Talent Essence.",
+            "В начале у вас будет |cff00ff00{}|r эссенции способностей и |cff00ff00{}|r эссенции талантов."),
             st.abilityEssence, st.talentEssence));
     else
-        Msg(player, "A new starting hand has been dealt.");
+        Msg(player, LocaleText(player, "A new starting hand has been dealt.", "Вы получили новую стартовую руку способностей."));
     if (!titleText.empty())
-        Msg(player, Acore::StringFormat("New title: |cffffd100{}|r.", titleText));
-    Msg(player, Acore::StringFormat("Your gold, bank, reputation, riding and flight paths are kept. {}{}",
-        keepQuests ? "Your quest history is kept." : "Your quest history is cleared, so every quest pays again.",
-        MailedNotice(mailed)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "New title: |cffffd100{}|r.", "Новое звание: |cffffd100{}|r."), titleText));
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "Your gold, bank, reputation, riding and flight paths are kept. {}{}",
+        "Золото, банк, репутация, навыки верховой езды и маршруты полётов сохранены. {}{}"),
+        LocaleText(player, keepQuests ? "Your quest history is kept." : "Your quest history is cleared, so every quest pays again.",
+            keepQuests ? "История заданий сохранена." : "История заданий очищена, поэтому за задания снова можно получить награды."),
+        MailedNotice(player, mailed)));
 
     // "RB|rank|kill%|other%|stat%|questsKept|mailed|abilityEssence|talentEssence|
     //  heirlooms next time|new title|carried ids"
@@ -3192,44 +3353,95 @@ namespace
         // the rule IS death. The list is in the order the picker shows it.
         { 1,  "nemesis",         "Nemesis",         UNLIMITED_LIVES, "Unlimited lives. The creature that kills you becomes your nemesis, a rare elite at least {nemesis_levels} levels above you that only you can see. Every nemesis you slay adds its level to your Vengeance. Reach level 80 with {vengeance} Vengeance to finish.", 500, 186, "mark_of_the_nemesis",
           "~Your nemesis~ You have unlimited lives on this run, and a death takes nothing from you. The creature that kills you becomes your nemesis instead, that one creature, for you alone. It waits for you where it lives as a rare elite {nemesis_levels} levels above you, or at its own level if that is higher, and it stays at least that far above you as you level, so every miss, dodge and resist in the fight is a real higher level foe's. ^ It wears a red arrow over its head, shows as a rare elite on your target frame and is on your minimap. Other players see and fight it as it always was. ^ ~Strengths and weaknesses~ Each nemesis has a strength and a weakness. You learn its strengths when a fight with it starts, and its weakness when you find it. Each time it kills you again it grows larger, up to twice its size, and gains another strength, up to three. ^ ~Swear Vendetta~ You learn it on this run. It makes a nemesis of a creature you choose in the open world, at your level or above, and not an elite or a boss. It becomes a Sworn nemesis, {sworn_levels} levels above you (or at its own level if that is higher), with Bloodlust, one more strength and a weakness. You can have one Sworn nemesis at a time, and swear again every {sworn_cooldown} minutes. ^ ~The kill~ Kill a nemesis, alone or with your pet, and you get the experience of an elite of its level with {nemesis_bonus} more, or {sworn_bonus} more for a Sworn one. It drops classless gear as often as a rare, heirloom roll included, and a Sworn one always drops a piece. It gives Vengeance: {marked_vengeance}, or {sworn_vengeance} for a Sworn one. If you are dead when it falls, the mark stays. ^ ~Trophies~ Each kill also drops a trophy of one of its strengths, chosen at random, with a star for each strength it had and one more if it was Sworn, up to three. Trophies work from your bags for the rest of the run, and all of them add up. You can carry {trophy_max}. Another waits until you destroy one, and one that finds your bags full waits for room. They cannot leave your bags: no bank, trade, mail or sale. ^ ~Finishing~ Reach level 80 with {vengeance} Vengeance. Reaching 80 first does not end the run, it ends when your Vengeance reaches the mark. When you finish, the best trophy of each kind adds its stars to your Nemesis Charm, up to five in each. The charm is yours for good: it works from your bags, and it cannot leave them or be destroyed. A run that ends unfinished loses its trophies. ^ ~No nemesis~ Deaths in dungeons and raids make no nemesis, and neither do deaths to elites, bosses, pets, totems or summoned creatures.",
-          "Remember what killed you and where. Your nemesis waits where it lives and stays above your level, so go back when you are ready for a harder fight rather than waiting for it to be easy. ^ Every death to it makes it larger and stronger. ^ Hover the challenge tracker for what you have learned of each nemesis and where it lives. The world map marks it too. ^ A Sworn nemesis is worth more Vengeance and a better trophy." },
+          "Remember what killed you and where. Your nemesis waits where it lives and stays above your level, so go back when you are ready for a harder fight rather than waiting for it to be easy. ^ Every death to it makes it larger and stronger. ^ Hover the challenge tracker for what you have learned of each nemesis and where it lives. The world map marks it too. ^ A Sworn nemesis is worth more Vengeance and a better trophy.",
+          Mode::Unchosen, { "Немезида",
+            "Бесконечные жизни. Убившее вас существо становится вашей Немезидой: редким элитным противником как минимум на {nemesis_levels} уровней выше вас, которого видите только вы. За каждую побеждённую Немезиду вы получаете Возмездие, равное её уровню. Достигните 80-го уровня и накопите {vengeance} Возмездия, чтобы завершить испытание.",
+            "~Ваша Немезида~ В этом испытании смерть не отнимает жизни. Существо, убившее вас, становится вашей личной Немезидой и ждёт вас там, где обитает. Это редкий элитный противник на {nemesis_levels} уровней выше вас или не ниже собственного уровня. По мере вашего роста он сохраняет это преимущество, поэтому промахи, уклонения и сопротивления в бою будут свойственны противнику более высокого уровня. ^ Над его головой появляется красная стрелка, а рамка цели показывает редкого элитного противника; его также видно на миникарте. Другие игроки видят и сражаются с обычным существом. ^ ~Сильные и слабые стороны~ У каждой Немезиды есть сильная и слабая сторона. Сильные стороны раскрываются в начале боя, слабая — когда вы её обнаружите. После каждой новой вашей смерти Немезида увеличивается, максимум вдвое, и получает ещё одну сильную сторону, всего до трёх. ^ ~Клятва мести~ В этом испытании вы изучите заклинание клятвы мести. Оно превращает выбранное вами существо открытого мира не ниже вашего уровня (но не элиту или босса) в Немезиду. Такая Немезида считается Призванной: она будет на {sworn_levels} уровней выше вас либо не ниже собственного уровня, получит Жажду крови, дополнительную сильную сторону и слабость. Одновременно может быть только одна Призванная Немезида; новую клятву можно дать раз в {sworn_cooldown} минут. ^ ~Победа~ Убейте Немезиду в одиночку или вместе с питомцем и получите опыт как за элитного противника её уровня, а также ещё {nemesis_bonus}, за Призванную Немезиду — ещё {sworn_bonus}. Она с вероятностью редкого существа выбрасывает классовое снаряжение, включая фамильную вещь; Призванная всегда оставляет одну вещь. Вы получите Возмездие: {marked_vengeance}, а за Призванную — {sworn_vengeance}. Если вы погибнете одновременно с ней, метка сохранится. ^ ~Трофеи~ Каждая Немезида оставляет случайный трофей одной из своих сильных сторон. За каждую такую сторону трофей получает звезду, а Призванный противник — ещё одну, всего не более трёх. Трофеи действуют, пока находятся в сумках, и их звёзды суммируются. Можно носить до {trophy_max} трофеев; новый будет ждать, пока вы не уничтожите один или не освободите место. Трофеи нельзя положить в банк, передать, отправить почтой или продать. ^ ~Завершение~ Достигните 80-го уровня и накопите {vengeance} Возмездия. Само достижение 80-го уровня не завершает испытание: нужно набрать указанное Возмездие. После завершения лучший трофей каждого типа добавит звёзды к Талисману Немезиды, максимум пять для каждого типа. Талисман навсегда останется вашим и действует из сумок; его нельзя передать или уничтожить. Если испытание закончится раньше, вы потеряете трофеи. ^ ~Без Немезиды~ Смерти в подземельях и рейдах не создают Немезид, как и смерти от элитных противников, боссов, питомцев, тотемов и призванных существ.",
+            "Запомните, кто и где вас убил. Немезида ждёт в месте своего обитания и остаётся сильнее вас, поэтому возвращайтесь, когда будете готовы к трудному бою. ^ Каждая новая смерть от её руки делает её крупнее и сильнее. ^ Наведите курсор на отслеживание испытания, чтобы посмотреть, что известно о Немезиде и где она обитает. Она также отмечена на карте мира. ^ Победа над Призванной Немезидой приносит больше Возмездия и лучший трофей." } },
         { 2,  "elite_world",     "Elite World",     5, "Every enemy is an elite for you, with elite health, damage and experience.", 750, 187, "giantsbane",
           "Every enemy you can fight is an elite for you alone, from the moment it comes into sight. You see the health this realm gives elites and the elite border on your target frame, it hits you and your pet with an elite's damage, melee and spells alike, it takes as many hits as an elite to bring down, and it pays you elite experience and drops classless gear as often as a rare, heirloom roll included. Rares are rare elites. Enemies that are already elite, rare elite or bosses are left as they are, in dungeons too, and pets, totems, summoned creatures, critters and civilians never change. Other players see and fight every one of them as it always was. Pull one at a time, and use every stun, slow and snare you own.",
-          "Pull one enemy at a time and rest between fights. Stuns, fears, slows and snares matter far more than usual. Anything that would be a fair fight on your own is now a group fight, so find others for it." },
+          "Pull one enemy at a time and rest between fights. Stuns, fears, slows and snares matter far more than usual. Anything that would be a fair fight on your own is now a group fight, so find others for it.",
+          Mode::Unchosen, { "Элитный мир",
+            "Каждый противник для вас становится элитным: у него элитные здоровье, урон и награда опытом.",
+            "Каждый противник, с которым вы можете сразиться, становится элитным только для вас, как только появляется в поле зрения. У него будет здоровье, заданное для элитных противников этого мира, и элитная рамка цели; он будет наносить вам и питомцу элитный урон в ближнем бою и заклинаниями, потребует столько же ударов для победы и даст элитный опыт. Снаряжение будет выпадать с обычной для редких противников вероятностью, включая фамильные вещи. Редкие существа станут редкими элитными. Уже элитные противники, редкие элиты и боссы не изменятся, в том числе в подземельях; питомцы, тотемы, призванные существа, мелкие животные и гражданские NPC тоже не изменятся. Другие игроки видят противников обычными. Сражайтесь по одному и используйте оглушения, замедления и опутывания.",
+            "Сражайтесь по одному противнику и отдыхайте между боями. Оглушения, страх, замедления и опутывания гораздо важнее обычного. Противник, с которым вы справлялись в одиночку, теперь потребует группы — найдите союзников." } },
         { 14, "legion",          "Legion",          4, "Every enemy calls two more of its kind to its side the first time it engages you. More to kill, more XP, more ways to die.", 650, 191, "one_against_many",
           "The first time an enemy engages you or your pet, two more of its kind appear beside it and join the fight. An enemy calls only once in its life, even if it resets and is pulled again. They give experience and loot like any other of their kind, and leave after five minutes out of combat. The reinforcements fight only you, so no one else can harm them and they harm no one else. Reinforcements never call reinforcements of their own. Bosses, critters, civilians, pets, totems and summoned creatures never call at all.",
-          "Fight where you have room to back away, and open with abilities that hit several enemies at once. Pull from range so you see the reinforcements coming, and keep away from other groups, since any of them that wanders in calls two more." },
+          "Fight where you have room to back away, and open with abilities that hit several enemies at once. Pull from range so you see the reinforcements coming, and keep away from other groups, since any of them that wanders in calls two more.",
+          Mode::Unchosen, { "Легион",
+            "При первой атаке каждый противник призывает к себе ещё двух существ своего вида. Вам предстоит убить больше врагов, получить больше опыта и пережить больше опасностей.",
+            "Когда противник впервые вступит в бой с вами или питомцем, рядом появятся ещё два существа его вида и присоединятся к схватке. Каждое существо призывает подкрепление только один раз за жизнь, даже если сбросит бой и его атакуют снова. Подкрепление даёт обычные опыт и добычу и исчезает через пять минут вне боя. Оно сражается только с вами: другие игроки не могут ему навредить, и оно не атакует их. Подкрепление не призывает новое подкрепление. Боссы, мелкие животные, гражданские NPC, питомцы, тотемы и призванные существа никого не призывают.",
+            "Выбирайте место, где можно отступить, и начинайте бой способностями, поражающими нескольких врагов. Атакуйте издалека, чтобы заметить подкрепление, и не приближайтесь к другим группам: любое существо, вошедшее в бой, тоже призовёт двоих." } },
         { 4,  "pursued",         "Pursued",         3, "Every 15 to 30 minutes of play an elite hunter two levels above you finds you and chases you until one of you dies or you change maps.", 600, 189, "turnabout",
           "Every 15 to 30 minutes of played time, counted while you are alive, a Relentless Hunter appears near you at random. It is a rare elite two levels above you, up to level 83, and it chases you until one of you dies. Killing it gives elite experience and starts the clock for the next one. If it kills you, or any death costs you a life, it leaves and a new clock starts. Changing maps, into a dungeon or across to another continent, leaves it behind and starts a new clock too. The clock keeps its place when you log out, and a hunter that was on you when you logged out finds you again 15 seconds after you log back in. Only you and your pet can harm it, and it harms no one else. Battlegrounds and arenas are safe from it.",
-          "Keep a defensive ability and a healing option ready at all times, because the hunter can arrive in the middle of another fight. Finish fights quickly, and when the hunter comes, kill it before anything else joins in." },
+          "Keep a defensive ability and a healing option ready at all times, because the hunter can arrive in the middle of another fight. Finish fights quickly, and when the hunter comes, kill it before anything else joins in.",
+          Mode::Unchosen, { "Преследование",
+            "Каждые 15–30 минут игры вас находит элитный охотник на два уровня выше и преследует, пока один из вас не погибнет или вы не смените карту.",
+            "Каждые 15–30 минут игры, пока вы живы, рядом случайным образом появляется Неумолимый охотник — редкий элитный противник на два уровня выше вас, максимум 83-го уровня. Он преследует вас, пока один из вас не погибнет. Убийство охотника даёт элитный опыт и запускает отсчёт до следующего появления. Если он убьёт вас или любая смерть отнимет жизнь, охотник уйдёт и отсчёт начнётся заново. При смене карты, переходе в подземелье или на другой континент он останется позади, а отсчёт начнётся заново. Выход из игры не сбрасывает таймер; если охотник уже преследовал вас, после входа он вернётся через 15 секунд. Навредить ему можете только вы и ваш питомец; он не атакует других. На полях боя и аренах он не появляется.",
+            "Всегда держите наготове защитную способность и лечение: охотник может появиться посреди другого боя. Быстро заканчивайте сражения и, когда он появится, убейте его прежде, чем вмешается кто-то ещё." } },
         { 15, "hourglass",       "Hourglass",       3, "A level clock. Gain a level every 30 minutes played or lose a life. The clock resets with every level, runs 20 minutes below level 20 and 45 past 60.", 500, 192, "rewind",
           "Every level has a time limit, counted while you are logged in and alive, and paused in battlegrounds and arenas. Below level 20 you have 20 minutes per level, from 20 to 60 you have 30, and past 60 you have 45. A warning comes with five minutes left. If time runs out you lose a life and the clock restarts on the same level. Reaching the next level resets the clock, and so does any death that costs a life.",
-          "Quest in zones at your level and run dungeons to keep the pace up, and save long trips between zones for the start of a level. The clock only counts while you are logged in and alive, so logging out pauses it." },
+          "Quest in zones at your level and run dungeons to keep the pace up, and save long trips between zones for the start of a level. The clock only counts while you are logged in and alive, so logging out pauses it.",
+          Mode::Unchosen, { "Песочные часы",
+            "На получение уровня отводится 30 минут игры; иначе вы потеряете жизнь. Таймер сбрасывается при повышении уровня: 20 минут до 20-го уровня и 45 минут после 60-го.",
+            "На каждый уровень отводится время, которое считается только пока вы вошли в игру и живы; на полях боя и аренах таймер приостанавливается. До 20-го уровня даётся 20 минут на уровень, с 20-го по 60-й — 30 минут, после 60-го — 45 минут. За пять минут до конца появится предупреждение. Если время истечёт, вы потеряете жизнь, а таймер начнётся заново на том же уровне. Повышение уровня или смерть, отнявшая жизнь, также сбрасывает таймер.",
+            "Выполняйте задания в зонах своего уровня и проходите подземелья, чтобы не отставать. Дальние переходы между зонами оставляйте на начало уровня. Таймер идёт, только пока вы в игре и живы, поэтому выход из игры его приостанавливает." } },
         { 5,  "glass",           "Glass",           3, "Your health is halved. Your damage is up by a third.", 400, 190, "shatterpoint",
           "Your maximum health is halved for the whole run, and all the damage you deal yourself, melee, spells and damage over time, is a third stronger. Your pet's damage is not. Enemies die faster, and so do you. Each point of Stamina gives half its usual health, so anything that keeps enemies away from you matters more than ever.",
-          "Favor abilities that keep enemies stunned, slowed or at range, since Stamina gives only half its usual health. Keep a heal or a shield for emergencies, and do not take on more than one enemy at a time if you can help it." },
+          "Favor abilities that keep enemies stunned, slowed or at range, since Stamina gives only half its usual health. Keep a heal or a shield for emergencies, and do not take on more than one enemy at a time if you can help it.",
+          Mode::Unchosen, { "Стеклянная пушка",
+            "Ваше здоровье уменьшено вдвое, а наносимый вами урон увеличен на треть.",
+            "На протяжении испытания максимальное здоровье уменьшено вдвое, а весь наносимый вами урон — атаками, заклинаниями и периодическими эффектами — увеличен на треть. Урон питомца не меняется. Враги умирают быстрее, но и вы тоже. Каждое очко выносливости даёт вдвое меньше здоровья, поэтому способности, не подпускающие противников, особенно важны.",
+            "Используйте способности, оглушающие, замедляющие или удерживающие врагов на расстоянии: выносливость даёт лишь половину обычного здоровья. Держите лечение или щит для опасных ситуаций и по возможности не сражайтесь сразу с несколькими врагами." } },
         { 16, "spiteful",        "Spiteful",        3, "Every creature you damage reflects a fifth of that damage back at you.", 450, 193, "spite_mirror",
           "Every time you damage a creature, a fifth of the damage it takes comes straight back to you, damage over time included. Big hits come back big. The reflected damage ignores your armor and absorb shields, so only healing keeps you ahead of it. Players, pets and summoned creatures never reflect.",
-          "Healing over time keeps you ahead of what comes back, and damage your pet deals is never reflected, so a pet does the risky work for free. The reflection is the same share of every hit, so a fast kill costs no more than a slow one." },
+          "Healing over time keeps you ahead of what comes back, and damage your pet deals is never reflected, so a pet does the risky work for free. The reflection is the same share of every hit, so a fast kill costs no more than a slow one.",
+          Mode::Unchosen, { "Злопамятный мир",
+            "Каждое существо возвращает вам пятую часть полученного от вас урона.",
+            "Каждый раз, когда вы наносите существу урон, пятая часть полученного им урона возвращается вам; это также относится к периодическому урону. Сильный удар возвращается сильным. Отражённый урон игнорирует броню и поглощающие щиты, поэтому удержаться помогут только исцеление и предотвращение урона. Игроки, питомцы и призванные существа урон не отражают.",
+            "Периодическое лечение поможет пережить возвращающийся урон. Урон питомца не отражается, поэтому он может безопасно принимать на себя риск. Отражается одинаковая доля каждого удара, так что быстрое убийство обходится не дороже медленного." } },
         { 17, "bloodpact",       "Bloodpact",       3, "Healing from spells, potions and other players is halved. The damage you deal heals you for 15% of it.", 450, 194, "sanguine_pact",
           "Every heal you receive is halved, whether it comes from your own spells, a potion or another player, heals over time included. Food, drink and natural regeneration are not. In return, all the damage you deal yourself, damage over time included, heals you for 15% of what it dealt. Your pet's damage does not. Fighting is how you stay alive.",
-          "Abilities that hit often heal you the most. Recover by fighting or by eating, and do not count on potions or healers to save you, since both are halved." },
+          "Abilities that hit often heal you the most. Recover by fighting or by eating, and do not count on potions or healers to save you, since both are halved.",
+          Mode::Unchosen, { "Кровавый договор",
+            "Исцеление от заклинаний, зелий и других игроков уменьшено вдвое. Наносимый вами урон исцеляет вас на 15% от его величины.",
+            "Любое получаемое вами исцеление уменьшается вдвое: от ваших заклинаний, зелий, других игроков и периодических эффектов. Еда, питьё и естественное восстановление не затронуты. Взамен весь наносимый вами урон, включая периодический, исцеляет вас на 15% от нанесённого. Урон питомца не учитывается. Чтобы выжить, сражайтесь.",
+            "Чаще используйте способности, наносящие много отдельных ударов: они сильнее исцеляют вас. Восстанавливайтесь в бою или с помощью еды и не рассчитывайте на зелья и лекарей — их исцеление тоже уменьшено вдвое." } },
         { 18, "berserker",       "Berserker",       3, "Below 35% health you deal double damage and your hits break snares. Above 75% you deal 30% less.", 450, 195, "brink",
           "Below 35% health all the damage you deal yourself is doubled, damage over time included, and every hit you land while that low breaks the snares on you. Roots are not broken. Above 75% health your damage is reduced by 30%. Between the two you fight as normal. Your pet's damage is not affected. The rule rewards fighting hurt and punishes playing it safe.",
-          "Learn when not to heal. Save your hardest hitting abilities for when you are below 35% health, and keep a shield or a burst of healing for when you are about to die rather than for topping up." },
+          "Learn when not to heal. Save your hardest hitting abilities for when you are below 35% health, and keep a shield or a burst of healing for when you are about to die rather than for topping up.",
+          Mode::Unchosen, { "Берсерк",
+            "Ниже 35% здоровья вы наносите двойной урон, а удары снимают замедление. Выше 75% здоровья ваш урон уменьшается на 30%.",
+            "Если здоровье ниже 35%, весь наносимый вами урон, включая периодический, удваивается, а каждый ваш удар снимает эффекты замедления. Эффекты обездвиживания не снимаются. При здоровье выше 75% ваш урон уменьшен на 30%; между этими порогами он обычный. Урон питомца не меняется. Испытание поощряет бой на грани поражения и наказывает за осторожную игру.",
+            "Научитесь вовремя отказываться от лечения. Приберегите самые сильные способности, пока здоровье не опустится ниже 35%. Щит или мощное лечение используйте, когда вам грозит гибель, а не для постоянного восстановления до максимума." } },
         { 19, "ironman",         "Ironman",         3, "Only white and grey gear can be worn. Anything better is refused.", 500, 196, "ironbound",
           "Only common and poor quality gear, white and grey, can be worn. When the run starts anything better is moved to your bags, or mailed to you if your bags are full, and from then on it cannot be equipped. Weapons count. Your stats, abilities and talents carry you, not your gear.",
-          "Vendors in every town sell white weapons and armor, so replace yours as you level. Spend stat points where your gear is weakest, and value talents and abilities that add damage or armor." },
+          "Vendors in every town sell white weapons and armor, so replace yours as you level. Spend stat points where your gear is weakest, and value talents and abilities that add damage or armor.",
+          Mode::Unchosen, { "Железная воля",
+            "Можно носить только белое и серое снаряжение. Всё более качественное снаряжение запрещено.",
+            "Разрешено только обычное и плохое снаряжение — белое и серое. В начале испытания всё более качественное снаряжение будет перемещено в сумки или отправлено вам почтой, если сумки полны. После этого его нельзя надевать. Это правило относится и к оружию. Вас спасают характеристики, способности и таланты, а не экипировка.",
+            "В городах торговцы продают белое оружие и броню — обновляйте снаряжение по мере роста уровня. Распределяйте очки характеристик там, где экипировка слабее, и выбирайте таланты и способности, повышающие урон или броню." } },
         { 20, "big_game_hunter", "Big Game Hunter", 3, "Normal enemies give no XP. Elites, rares and bosses give full, quests give double.", 400, 197, "trophy_hunt",
           "Normal enemies give no experience at all. Elite, rare and boss enemies give their full experience, and quests give double, Dungeon Finder rewards included. Exploration and battleground experience are unchanged. Hunt the dangerous things, run the dungeons, and do the quests.",
-          "Look for elite quest areas and dungeons at your level, and pick up every quest you find, since quests pay double. Group up for elites you cannot take alone." },
+          "Look for elite quest areas and dungeons at your level, and pick up every quest you find, since quests pay double. Group up for elites you cannot take alone.",
+          Mode::Unchosen, { "Охотник на крупную дичь",
+            "Обычные противники не дают опыта. Элитные существа, редкие противники и боссы дают обычный опыт, а задания — двойной.",
+            "Обычные противники не дают опыт. Элитные существа, редкие противники и боссы дают полный опыт, а задания — двойной, включая награды системы поиска подземелий. Опыт за исследование мира и поля боя не меняется. Охотьтесь на опасных врагов, проходите подземелья и выполняйте задания.",
+            "Ищите задания в элитных зонах и подземелья своего уровня. Берите все задания, какие встретите: за них дают вдвое больше опыта. Объединяйтесь с другими игроками, если элитного противника не одолеть в одиночку." } },
         { 21, "dealt_hand",      "Dealt Hand",      UNLIMITED_LIVES, "Wildcard Heroes only. Unlimited lives. No rerolls, starting hand included. You play every ability and talent the Wildcard deals you.", 500, 198, "loaded_die",
           "This run is for Wildcard Heroes, and it has unlimited lives, so a death never ends it. From the moment it starts nothing can be rerolled. Not the starting hand, not the abilities and talents dealt as you level, and no Reroll Scroll changes that. The reroll charges you earn each level still build up, and they are yours to spend when the run ends.",
           "Read every ability you are dealt and find the few that work together, then build around them. Talents are dealt too, so look over My Build after each level. Stat points are still yours to place, so use them to cover what the hand is missing.",
-          Mode::Wildcard },
+          Mode::Wildcard, { "Рука судьбы",
+            "Только для героев случайного пути. Бесконечные жизни. Перебросы запрещены, включая стартовую руку. Вы играете всеми способностями и талантами, которые выдаёт случайный путь.",
+            "Это испытание доступно героям случайного пути и даёт бесконечные жизни: смерть не завершает забег. С его начала запрещены любые перебросы — стартовой руки, способностей и талантов, получаемых при повышении уровня. Свиток переброса тоже не поможет. Заряды переброса продолжат накапливаться за уровни; использовать их можно будет после завершения испытания.",
+            "Изучайте каждую выданную способность и ищите сочетания, на которых можно построить сборку. Таланты тоже выдаются случайно, поэтому после каждого уровня проверяйте свою сборку. Очки характеристик распределяйте сами — ими можно компенсировать слабые стороны полученной руки." } },
         { 3,  "hardcore",        "Hardcore",        1, "One life, plus your extra life if you hold one. When it is gone the run ends.", 1000, 188, "last_breath",
           "You have one life, two if you hold an extra life when you start. When the last is lost the run is over, though you keep your level, gear and build and simply carry on without the rule. Deaths in battlegrounds and arenas, and while you are dueling, do not count. The largest gold reward of any challenge.",
-          "Know your escape abilities and when to use them, avoid fights you are not sure of, and rest to full before every pull. Duels, battlegrounds and arenas cost nothing, so they are safe places to practice." },
+          "Know your escape abilities and when to use them, avoid fights you are not sure of, and rest to full before every pull. Duels, battlegrounds and arenas cost nothing, so they are safe places to practice.",
+          Mode::Unchosen, { "Хардкор",
+            "У вас одна жизнь или две, если при начале испытания у вас есть дополнительная. После их потери испытание завершится.",
+            "В начале испытания у вас будет одна жизнь или две, если у вас есть дополнительная. После потери последней жизни испытание завершится, но уровень, снаряжение и сборка сохранятся — вы продолжите игру без правила. Смерти на полях боя, аренах и во время дуэлей не учитываются. Среди испытаний здесь самая крупная награда золотом.",
+            "Знайте способности для отступления и вовремя применяйте их. Избегайте сомнительных боёв и полностью восстанавливайтесь перед нападением. Дуэли, поля боя и арены не отнимают жизни — там можно безопасно потренироваться." } },
     };
 
     // true when the title is new to this character
@@ -3262,16 +3474,20 @@ std::vector<Challenge> const& ClasslessMgr::Challenges()
 
 namespace
 {
-    std::string CountWord(uint32 n)
+    std::string CountWord(uint32 n, Player* player)
     {
+        if (IsRussian(player))
+            return std::to_string(n);
         static char const* const words[] = { "no", "one", "two", "three", "four", "five", "six", "seven",
                                              "eight", "nine", "ten" };
         return n < 11 ? words[n] : std::to_string(n);
     }
 
     // a share of a level, as a sentence says it
-    std::string LevelShare(uint32 pct)
+    std::string LevelShare(uint32 pct, Player* player)
     {
+        if (IsRussian(player))
+            return Acore::StringFormat("{}% от уровня", pct);
         switch (pct)
         {
             case 10:  return "a tenth of a level";
@@ -3285,8 +3501,10 @@ namespace
     }
 
     // a multiple of its level, as a sentence says it
-    std::string TimesLevel(uint32 pct)
+    std::string TimesLevel(uint32 pct, Player* player)
     {
+        if (IsRussian(player))
+            return pct == 100 ? "уровень существа" : Acore::StringFormat("{}% уровня существа", pct);
         switch (pct)
         {
             case 100: return "its level";
@@ -3298,24 +3516,39 @@ namespace
     }
 }
 
-std::string ClasslessMgr::ChallengeText(char const* raw) const
+std::string ClasslessMgr::ChallengeText(char const* raw, Player* player) const
 {
     std::string text = raw ? raw : "";
+    if (IsRussian(player))
+        for (Challenge const& challenge : CHALLENGES)
+        {
+            if (text == challenge.rule && challenge.ruRU.rule)
+                text = challenge.ruRU.rule;
+            else if (text == challenge.detail && challenge.ruRU.detail)
+                text = challenge.ruRU.detail;
+            else if (text == challenge.tips && challenge.ruRU.tips)
+                text = challenge.ruRU.tips;
+        }
     auto fill = [&text](std::string const& token, std::string const& value)
     {
         for (size_t at = text.find(token); at != std::string::npos; at = text.find(token, at + value.size()))
             text.replace(at, token.size(), value);
     };
-    fill("{nemesis_levels}", CountWord(cfg.nemesisMarkedLevels));
-    fill("{nemesis_bonus}", LevelShare(cfg.nemesisMarkedBonusXpPct));
-    fill("{sworn_levels}", CountWord(cfg.nemesisSwornLevels));
-    fill("{sworn_bonus}", LevelShare(cfg.nemesisSwornBonusXpPct));
+    fill("{nemesis_levels}", CountWord(cfg.nemesisMarkedLevels, player));
+    fill("{nemesis_bonus}", LevelShare(cfg.nemesisMarkedBonusXpPct, player));
+    fill("{sworn_levels}", CountWord(cfg.nemesisSwornLevels, player));
+    fill("{sworn_bonus}", LevelShare(cfg.nemesisSwornBonusXpPct, player));
     fill("{sworn_cooldown}", std::to_string(cfg.nemesisSwornCooldownMin));
-    fill("{marked_vengeance}", TimesLevel(100));
-    fill("{sworn_vengeance}", TimesLevel(cfg.nemesisSwornVengeancePct));
+    fill("{marked_vengeance}", TimesLevel(100, player));
+    fill("{sworn_vengeance}", TimesLevel(cfg.nemesisSwornVengeancePct, player));
     fill("{vengeance}", std::to_string(cfg.nemesisVengeanceToFinish));
-    fill("{trophy_max}", CountWord(cfg.nemesisTrophyMax));
+    fill("{trophy_max}", CountWord(cfg.nemesisTrophyMax, player));
     return text;
+}
+
+std::string ClasslessMgr::ChallengeName(Challenge const& challenge, Player* player) const
+{
+    return IsRussian(player) && challenge.ruRU.name ? challenge.ruRU.name : challenge.name;
 }
 
 Challenge const* ClasslessMgr::GetChallenge(uint8 id)
@@ -3338,19 +3571,22 @@ bool ClasslessMgr::StartRun(Player* player, uint8 challengeId, std::string* err)
     Challenge const* ch = GetChallenge(challengeId);
     if (st.exempt)
     {
-        if (err) *err = "This character does not walk the Hero's path.";
+        if (err) *err = LocaleText(player, "This character does not walk the Hero's path.", "Этот персонаж не следует пути героя.");
         return false;
     }
     if (!ch)
     {
-        if (err) *err = "That challenge does not exist.";
+        if (err) *err = LocaleText(player, "That challenge does not exist.", "Такого испытания не существует.");
         return false;
     }
     if (st.run)
     {
-        if (err) *err = Acore::StringFormat("You are already on a run: {}. Finish it first{}.",
-                                            GetChallenge(st.run) ? GetChallenge(st.run)->name : "a challenge",
-                                            st.livesMax == UNLIMITED_LIVES ? "" : ", or run out of lives");
+        if (err) *err = Acore::StringFormat(LocaleText(player,
+            "You are already on a run: {}. Finish it first{}.",
+            "Вы уже участвуете в испытании «{}». Сначала завершите его{}."),
+            GetChallenge(st.run) ? ChallengeName(*GetChallenge(st.run), player)
+                                 : LocaleText(player, "a challenge", "испытание"),
+            st.livesMax == UNLIMITED_LIVES ? "" : LocaleText(player, ", or run out of lives", " или потеряйте все жизни"));
         return false;
     }
 
@@ -3358,20 +3594,23 @@ bool ClasslessMgr::StartRun(Player* player, uint8 challengeId, std::string* err)
     // the path the character already walks.
     if (player->GetLevel() >= cfg.modeChoiceDeadline)
     {
-        if (err) *err = Acore::StringFormat("Challenge runs start before level {}.", uint32(cfg.modeChoiceDeadline));
+        if (err) *err = Acore::StringFormat(LocaleText(player, "Challenge runs start before level {}.",
+            "Испытание можно начать до {} уровня."), uint32(cfg.modeChoiceDeadline));
         return false;
     }
     if (st.mode == Mode::Unchosen)
     {
-        if (err) *err = "Choose your path first.";
+        if (err) *err = LocaleText(player, "Choose your path first.", "Сначала выберите путь.");
         return false;
     }
     // A challenge built on one path's mechanics is for that path only; the
     // run never changes the path to fit.
     if (ch->path != Mode::Unchosen && st.mode != ch->path)
     {
-        if (err) *err = Acore::StringFormat("{} is for {} Heroes.", ch->name,
-                                            ch->path == Mode::Wildcard ? "Wildcard" : "Classless");
+        if (err) *err = Acore::StringFormat(LocaleText(player, "{} is for {} Heroes.", "Испытание «{}» доступно только героям пути «{}»."),
+                                            ChallengeName(*ch, player),
+                                            LocaleText(player, ch->path == Mode::Wildcard ? "Wildcard" : "Classless",
+                                                       ch->path == Mode::Wildcard ? "Случайный" : "Свободный"));
         return false;
     }
 
@@ -3413,8 +3652,10 @@ bool ClasslessMgr::StartRun(Player* player, uint8 challengeId, std::string* err)
                 if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
                     if (item->GetTemplate()->Quality > ITEM_QUALITY_NORMAL)
                         slots.push_back(slot);
-            mailed = UnequipToBags(player, slots, "Ironman",
-                "Your bags were full when your Ironman run began. This was on your back.");
+            mailed = UnequipToBags(player, slots,
+                LocaleText(player, "Ironman", "Железная воля"),
+                LocaleText(player, "Your bags were full when your Ironman run began. This was on your back.",
+                    "Ваши сумки были полны, когда началось испытание «Железная воля». Эта вещь была на вас."));
             break;
         }
         default:
@@ -3423,10 +3664,15 @@ bool ClasslessMgr::StartRun(Player* player, uint8 challengeId, std::string* err)
 
     SaveState(player);
     if (st.livesMax == UNLIMITED_LIVES)
-        Msg(player, Acore::StringFormat("|cffffd100{}|r begins. {}{}", ch->name, ChallengeText(ch->rule), MailedNotice(mailed)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "|cffffd100{}|r begins. {}{}",
+            "Начинается испытание |cffffd100{}|r. {}{}"),
+            ChallengeName(*ch, player), ChallengeText(ch->rule, player), MailedNotice(player, mailed)));
     else
-        Msg(player, Acore::StringFormat("|cffffd100{}|r begins. {} You have {} {}.{}",
-            ch->name, ChallengeText(ch->rule), uint32(st.lives), st.lives == 1 ? "life" : "lives", MailedNotice(mailed)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "|cffffd100{}|r begins. {} You have {} {}.{}",
+            "Начинается испытание |cffffd100{}|r. {} У вас {} {}.{}"),
+            ChallengeName(*ch, player), ChallengeText(ch->rule, player), uint32(st.lives),
+            LocaleCount(player, st.lives, "life", "lives", "жизнь", "жизни", "жизней"),
+            MailedNotice(player, mailed)));
     PushRunTracker(player);
     return true;
 }
@@ -3461,13 +3707,14 @@ void ClasslessMgr::LoseLife(Player* player, Unit* killer)
             break;
         case ChallengeId::Hourglass:
             st->runData = 0;    // the clock starts again with the new life
-            what = "The clock starts again.";
+            what = LocaleText(player, "The clock starts again.", "Отсчёт времени начался заново.");
             break;
         case ChallengeId::Pursued:
             DespawnHunter(player);   // the one that got you leaves; the clock brings the next
             st->runData = NextHunterIn();
             st->hunterTimerMs = 0;
-            what = "The hunter leaves you where you fell. Another is coming.";
+            what = LocaleText(player, "The hunter leaves you where you fell. Another is coming.",
+                              "Охотник оставил вас и ушёл. Скоро появится следующий.");
             break;
         default:
             break;
@@ -3478,11 +3725,16 @@ void ClasslessMgr::LoseLife(Player* player, Unit* killer)
     PushRunTracker(player);
     if (unlimited)
         Msg(player, what.empty()
-            ? Acore::StringFormat("|cffff4444You died.|r {} goes on.", ch->name)
-            : Acore::StringFormat("|cffff4444You died.|r {}: {}", ch->name, what));
+            ? Acore::StringFormat(LocaleText(player, "|cffff4444You died.|r {} goes on.",
+                "|cffff4444Вы погибли.|r Испытание {} продолжается."), ChallengeName(*ch, player))
+            : Acore::StringFormat(LocaleText(player, "|cffff4444You died.|r {}: {}",
+                "|cffff4444Вы погибли.|r {}: {}"), ChallengeName(*ch, player), what));
     else
-        Msg(player, Acore::StringFormat("|cffff4444A life lost.|r {}: {} of {} {} left.{}{}",
-            ch->name, uint32(st->lives), uint32(st->livesMax), st->livesMax == 1 ? "life" : "lives",
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "|cffff4444A life lost.|r {}: {} of {} {} left.{}{}",
+            "|cffff4444Потеряна жизнь.|r Испытание {}: у вас осталось {} из {} {}.{}{}"),
+            ChallengeName(*ch, player), uint32(st->lives), uint32(st->livesMax),
+            LocaleCount(player, st->lives, "life", "lives", "жизнь", "жизни", "жизней"),
             what.empty() ? "" : " ", what));
 
     if (!unlimited && !st->lives)
@@ -3581,41 +3833,78 @@ void ClasslessMgr::EndRun(Player* player, bool finished, bool byRebirth)
     //  reward spell (new only)|title (new only)|Unbroken title (new only)|repeat|
     //  deaths (lives used, or deaths on an unlimited run)|ended by a Rebirth"
     PushAddon(player, Acore::StringFormat("RE|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-        finished ? 1 : 0, uint32(level), shards, gold, ch->name, uint32(ch->id),
+        finished ? 1 : 0, uint32(level), shards, gold, ChallengeName(*ch, player), uint32(ch->id),
         uint32(livesLeft), uint32(livesMax), rewardSpell, titleText, unbrokenText, repeat ? 1 : 0,
         uint32(used), byRebirth ? 1 : 0));
     PushRunTracker(player);   // run 0: the tracker goes away
 
-    std::string const earned = Acore::StringFormat("|cffffffff{}|r shard{}{}", shards, shards == 1 ? "" : "s",
-        gold ? Acore::StringFormat(" and |cffffffff{}|r gold", gold) : std::string());
+    std::string earned;
+    if (IsRussian(player))
+    {
+        earned = Acore::StringFormat("|cffffffff{}|r {}", shards,
+            LocaleCount(player, shards, "shard", "shards", "осколок", "осколка", "осколков"));
+        if (gold)
+            earned += Acore::StringFormat(" и |cffffffff{}|r {}", gold,
+                LocaleCount(player, gold, "", "", "золотую монету", "золотые монеты", "золотых монет"));
+    }
+    else
+        earned = Acore::StringFormat("|cffffffff{}|r shard{}{}", shards, shards == 1 ? "" : "s",
+            gold ? Acore::StringFormat(" and |cffffffff{}|r gold", gold) : std::string());
     if (finished)
     {
         if (unlimited)
-            Msg(player, Acore::StringFormat("|cff00ff00Challenge complete: {}.|r You reached level {} after {} {}. "
-                "The rule lifts.", ch->name, uint32(level), uint32(used), used == 1 ? "death" : "deaths"));
+        {
+            if (IsRussian(player))
+                Msg(player, Acore::StringFormat(
+                    "|cff00ff00Испытание завершено: {}.|r Вы достигли {} уровня, умерев {} раз. Правило испытания снято.",
+                    ChallengeName(*ch, player), uint32(level), uint32(used)));
+            else
+                Msg(player, Acore::StringFormat(
+                    "|cff00ff00Challenge complete: {}.|r You reached level {} after {} {}. The rule lifts.",
+                    ChallengeName(*ch, player), uint32(level), uint32(used),
+                    LocaleCount(player, used, "death", "deaths", "", "", "")));
+        }
         else
-            Msg(player, Acore::StringFormat("|cff00ff00Challenge complete: {}.|r You reached level {} with {} of {} {} left. "
-                "The rule lifts.", ch->name, uint32(level), uint32(livesLeft), uint32(livesMax),
-                livesMax == 1 ? "life" : "lives"));
-        Msg(player, Acore::StringFormat("You earn {}.{}", earned,
-            repeat ? " Gold is paid for the first finish only." : ""));
+        {
+            if (IsRussian(player))
+                Msg(player, Acore::StringFormat(
+                    "|cff00ff00Испытание завершено: {}.|r Вы достигли {} уровня, сохранив {} из {} {}. Правило испытания снято.",
+                    ChallengeName(*ch, player), uint32(level), uint32(livesLeft), uint32(livesMax),
+                    LocaleCount(player, livesMax, "", "", "жизни", "жизней", "жизней")));
+            else
+                Msg(player, Acore::StringFormat(
+                    "|cff00ff00Challenge complete: {}.|r You reached level {} with {} of {} {} left. The rule lifts.",
+                    ChallengeName(*ch, player), uint32(level), uint32(livesLeft), uint32(livesMax),
+                    LocaleCount(player, livesLeft, "life", "lives", "", "", "")));
+        }
+        Msg(player, Acore::StringFormat(LocaleText(player, "You earn {}.{}", "Вы получаете {}.{}"), earned,
+            repeat ? LocaleText(player, " Gold is paid for the first finish only.",
+                                " Золото выдаётся только за первое завершение.") : ""));
         if (rewardSpell)
-            Msg(player, Acore::StringFormat("|cffa335ee{}|r is yours as an heirloom: usable from level 1 and kept "
-                "through every Rebirth.", SpellName(rewardSpell)));
+            Msg(player, Acore::StringFormat(LocaleText(player,
+                "|cffa335ee{}|r is yours as an heirloom: usable from level 1 and kept through every Rebirth.",
+                "|cffa335ee{}|r теперь ваша унаследованная способность: доступна с 1-го уровня и сохраняется после каждого Перерождения."),
+                SpellName(rewardSpell, player)));
         if (!titleText.empty())
-            Msg(player, Acore::StringFormat("New title: |cffffd100{}|r.", titleText));
+            Msg(player, Acore::StringFormat(LocaleText(player, "New title: |cffffd100{}|r.",
+                "Новое звание: |cffffd100{}|r."), titleText));
         if (!used)
-            Msg(player, Acore::StringFormat("{}: a third more shards{}.", unlimited ? "Not a single death" : "Not a life lost",
+            Msg(player, Acore::StringFormat(LocaleText(player, "{}: a third more shards{}.", "{}: на треть больше осколков{}."),
+                unlimited ? LocaleText(player, "Not a single death", "Ни одной смерти")
+                          : LocaleText(player, "Not a life lost", "Ни одной потерянной жизни"),
                 unbrokenText.empty() ? ""
-                : Acore::StringFormat(", and the title |cffffd100{}|r", unbrokenText)));
+                : Acore::StringFormat(LocaleText(player, ", and the title |cffffd100{}|r", ", и звание |cffffd100{}|r"), unbrokenText)));
     }
     else if (byRebirth)
-        Msg(player, Acore::StringFormat("|cffff4444Challenge over: {}.|r Your Rebirth ends the run at level {}. "
-            "You earn {}. The rule lifts.", ch->name, uint32(level), earned));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "|cffff4444Challenge over: {}.|r Your Rebirth ends the run at level {}. You earn {}. The rule lifts.",
+            "|cffff4444Испытание «{}» завершено.|r Перерождение завершило забег на {} уровне. Вы получаете {}. Правило испытания снято."),
+            ChallengeName(*ch, player), uint32(level), earned));
     else
-        Msg(player, Acore::StringFormat("|cffff4444Challenge over: {}.|r Your last life was lost at level {}. "
-            "You earn {}. The rule lifts; your level, gear and build stay.",
-            ch->name, uint32(level), earned));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "|cffff4444Challenge over: {}.|r Your last life was lost at level {}. You earn {}. The rule lifts; your level, gear and build stay.",
+            "|cffff4444Испытание «{}» завершено.|r Последняя жизнь потеряна на {} уровне. Вы получаете {}. Правило испытания снято; уровень, снаряжение и сборка сохранены."),
+            ChallengeName(*ch, player), uint32(level), earned));
 }
 
 bool ClasslessMgr::BuyExtraLife(Player* player, std::string* err)
@@ -3623,18 +3912,20 @@ bool ClasslessMgr::BuyExtraLife(Player* player, std::string* err)
     CharState& st = GetState(player);
     if (st.extraLife)
     {
-        if (err) *err = "You already hold an extra life for your next run.";
+        if (err) *err = LocaleText(player, "You already hold an extra life for your next run.",
+                                   "У вас уже есть дополнительная жизнь для следующего испытания.");
         return false;
     }
     if (st.shards < EXTRA_LIFE_SHARDS)
     {
-        if (err) *err = Acore::StringFormat("An extra life costs {} shards. You have {}.", EXTRA_LIFE_SHARDS, st.shards);
+        if (err) *err = Acore::StringFormat(LocaleText(player, "An extra life costs {} shards. You have {}.",
+            "Дополнительная жизнь стоит {} осколков. У вас есть {}."), EXTRA_LIFE_SHARDS, st.shards);
         return false;
     }
     st.shards -= EXTRA_LIFE_SHARDS;
     st.extraLife = 1;
     SaveState(player);
-    Msg(player, "An extra life, for your next run.");
+    Msg(player, LocaleText(player, "An extra life, for your next run.", "Дополнительная жизнь для следующего испытания."));
     return true;
 }
 
@@ -3779,18 +4070,26 @@ void ClasslessMgr::ResyncNemesisCopy(Player* player, Creature* copy, NemesisMark
 }
 
 // ---- traits ----------------------------------------------------------------
-char const* ClasslessMgr::NemesisStrengthName(uint8 strength)
+std::string ClasslessMgr::NemesisStrengthName(uint8 strength, Player* player)
 {
-    static char const* const names[NS_COUNT] = { "", "Bloodlust", "Ironhide", "Spellward", "Venomous",
-                                                  "Unyielding", "Warband", "Relentless" };
-    return strength < NS_COUNT ? names[strength] : "";
+    static char const* const english[NS_COUNT] = { "", "Bloodlust", "Ironhide", "Spellward", "Venomous",
+                                                    "Unyielding", "Warband", "Relentless" };
+    static char const* const russian[NS_COUNT] = { "", "Жажда крови", "Железная шкура", "Защита от магии", "Ядовитость",
+                                                    "Несгибаемость", "Стая", "Неутомимость" };
+    if (strength >= NS_COUNT)
+        return {};
+    return IsRussian(player) ? russian[strength] : english[strength];
 }
 
-char const* ClasslessMgr::NemesisWeaknessName(uint8 weakness)
+std::string ClasslessMgr::NemesisWeaknessName(uint8 weakness, Player* player)
 {
-    static char const* const names[NW_COUNT] = { "", "fire", "frost", "shadow", "nature", "arcane", "holy",
-                                                 "brittle", "cowardly" };
-    return weakness < NW_COUNT ? names[weakness] : "";
+    static char const* const english[NW_COUNT] = { "", "fire", "frost", "shadow", "nature", "arcane", "holy",
+                                                   "brittle", "cowardly" };
+    static char const* const russian[NW_COUNT] = { "", "огонь", "лёд", "тьма", "природа", "тайная магия", "свет",
+                                                   "хрупкость", "трусость" };
+    if (weakness >= NW_COUNT)
+        return {};
+    return IsRussian(player) ? russian[weakness] : english[weakness];
 }
 
 // A strength it does not have yet, in its first empty slot; none past three.
@@ -3845,7 +4144,8 @@ void ClasslessMgr::NemesisSay(Player* player, Creature* copy, std::string const&
         return;
     WorldPacket data;
     ChatHandler::BuildChatPacket(data, emote ? CHAT_MSG_MONSTER_EMOTE : CHAT_MSG_MONSTER_SAY, LANG_UNIVERSAL,
-                                 copy, player, text);
+                                 copy, player, text, 0, "",
+                                 player->GetSession()->GetSessionDbLocaleIndex());
     player->SendDirectMessage(&data);
 }
 
@@ -3873,29 +4173,30 @@ void ClasslessMgr::PrepareSwearVendetta()
 
 bool ClasslessMgr::CanSwearVendetta(Player* player, Creature* target, std::string* err)
 {
-    auto fail = [err](char const* text)
+    auto fail = [err, player](char const* english, char const* russian)
     {
         if (err)
-            *err = text;
+            *err = LocaleText(player, english, russian);
         return false;
     };
     CharState* st = player ? FindState(player) : nullptr;
     if (!st || st->run != uint8(ChallengeId::Nemesis))
-        return fail("Swear Vendetta works only on a Nemesis run.");
+        return fail("Swear Vendetta works only on a Nemesis run.", "Клятва мести доступна только в испытании «Немезида».");
     if (!target || target->IsPet() || target->IsTotem() || target->IsSummon() || target->GetOwnerGUID()
         || !target->GetSpawnId() || target->IsCritter() || target->IsTrigger())
-        return fail("You cannot swear vendetta on that.");
+        return fail("You cannot swear vendetta on that.", "Нельзя поклясться отомстить этому существу.");
     if (target->GetMap()->IsDungeon())
-        return fail("Not in a dungeon or raid.");
+        return fail("Not in a dungeon or raid.", "Нельзя использовать в подземелье или рейде.");
     if (target->isElite() || target->isWorldBoss() || target->IsDungeonBoss())
-        return fail("Not on an elite or a boss.");
+        return fail("Not on an elite or a boss.", "Нельзя выбрать элитного противника или босса.");
     if (target->GetLevel() < player->GetLevel())   // always: a vendetta is sworn up, never down
-        return fail("It must be at least your level.");
+        return fail("It must be at least your level.", "Уровень существа должен быть не ниже вашего.");
     if (st->nemeses.count(target->GetSpawnId()))
-        return fail("It is already your nemesis.");
+        return fail("It is already your nemesis.", "Это существо уже ваша Немезида.");
     for (auto const& [spawnId, mark] : st->nemeses)
         if (mark.kind == NEMESIS_SWORN)
-            return fail("You have a sworn nemesis already. Slay it first.");
+            return fail("You have a sworn nemesis already. Slay it first.",
+                        "У вас уже есть Призванная Немезида. Сначала победите её.");
     return true;
 }
 
@@ -3932,9 +4233,11 @@ void ClasslessMgr::SwearVendetta(Player* player, Creature* target)
         copy->HandleEmoteCommand(EMOTE_ONESHOT_ROAR);
         NemesisTaunt(player, copy, mark, NemesisMoment::Sworn);
     }
-    PushAddon(player, Acore::StringFormat("NV|{}|{}|{}", target->GetName(), level, NemesisTitle(mark)));
-    Msg(player, Acore::StringFormat("You swear vendetta on {}, now a level {} rare elite in a blood fury. "
-        "Leave, and it waits for you where it lives.", target->GetName(), level));
+    PushAddon(player, Acore::StringFormat("NV|{}|{}|{}", CreatureNameFor(player, target->GetEntry()), level, NemesisTitle(mark, player)));
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "You swear vendetta on {}, now a level {} rare elite in a blood fury. Leave, and it waits for you where it lives.",
+        "Вы поклялись отомстить {}. Теперь это редкий элитный противник {} уровня, охваченный жаждой крови. Если уйдёте, он будет ждать вас в своём логове."),
+        CreatureNameFor(player, target->GetEntry()), level));
     NemesisTick(player);
     PushRunTracker(player);
 }
@@ -3947,24 +4250,41 @@ void ClasslessMgr::NemesisTaunt(Player* player, Creature* copy, NemesisMark cons
     bool const talks = type == CREATURE_TYPE_HUMANOID || type == CREATURE_TYPE_UNDEAD || type == CREATURE_TYPE_DEMON
                        || type == CREATURE_TYPE_DRAGONKIN || type == CREATURE_TYPE_GIANT;
     bool const sworn = mark.kind == NEMESIS_SWORN;
-    static std::vector<char const*> const engageSay = {
-        "You came back, {}. I remember you.", "Again? Then I will kill you again.", "I still have your scent, {}." };
-    static std::vector<char const*> const engageSworn = {
-        "You swore against me, {}. Now you answer for it.", "Your vendetta ends here, {}.",
-        "You wanted me. Here I am." };
-    static std::vector<char const*> const engageEmote = {
-        "remembers you.", "bares its teeth at you, remembering.", "has your scent again." };
-    static std::vector<char const*> const gloatSay = {
-        "Stay down, {}.", "Again you fall. Again I grow stronger.", "Every time you die, I remember it." };
-    static std::vector<char const*> const gloatEmote = { "stands over your body.", "grows stronger from your death." };
-    static std::vector<char const*> const deathSay = {
-        "You... earned this, {}.", "This is not how it ends...", "Remember... me..." };
-    static std::vector<char const*> const deathEmote = { "falls, its hunt over.", "lets out a last cry." };
-    static std::vector<char const*> const swornSay = {
-        "You swear on my name, {}? Then come and take it.", "So be it, {}. One of us dies.",
-        "I accept, {}. Run while you can." };
-    static std::vector<char const*> const swornEmote = { "lets out a challenging roar!", "answers your vendetta with a roar!" };
-    std::vector<char const*> const* pool = nullptr;
+    using LocalizedLine = std::pair<char const*, char const*>;
+    static std::vector<LocalizedLine> const engageSay = {
+        { "You came back, {}. I remember you.", "Ты вернулся, {}. Я тебя помню." },
+        { "Again? Then I will kill you again.", "Опять? Тогда я снова тебя убью." },
+        { "I still have your scent, {}.", "Я всё ещё чую твой след, {}." } };
+    static std::vector<LocalizedLine> const engageSworn = {
+        { "You swore against me, {}. Now you answer for it.", "Ты поклялся отомстить мне, {}. Теперь ответишь за это." },
+        { "Your vendetta ends here, {}.", "Твоя месть закончится здесь, {}." },
+        { "You wanted me. Here I am.", "Ты искал меня. Вот я." } };
+    static std::vector<LocalizedLine> const engageEmote = {
+        { "remembers you.", "узнаёт вас." },
+        { "bares its teeth at you, remembering.", "скалится, вспомнив вас." },
+        { "has your scent again.", "снова чует ваш след." } };
+    static std::vector<LocalizedLine> const gloatSay = {
+        { "Stay down, {}.", "Не вставай, {}." },
+        { "Again you fall. Again I grow stronger.", "Ты снова пал. Я снова стал сильнее." },
+        { "Every time you die, I remember it.", "Я помню каждый раз, когда ты погибаешь." } };
+    static std::vector<LocalizedLine> const gloatEmote = {
+        { "stands over your body.", "склоняется над вашим телом." },
+        { "grows stronger from your death.", "становится сильнее после вашей гибели." } };
+    static std::vector<LocalizedLine> const deathSay = {
+        { "You... earned this, {}.", "Ты... заслужил эту победу, {}." },
+        { "This is not how it ends...", "Это ещё не конец..." },
+        { "Remember... me...", "Помни... обо мне..." } };
+    static std::vector<LocalizedLine> const deathEmote = {
+        { "falls, its hunt over.", "падает; охота окончена." },
+        { "lets out a last cry.", "издаёт последний крик." } };
+    static std::vector<LocalizedLine> const swornSay = {
+        { "You swear on my name, {}? Then come and take it.", "Клянешься моим именем, {}? Тогда приходи и докажи это." },
+        { "So be it, {}. One of us dies.", "Да будет так, {}. Один из нас погибнет." },
+        { "I accept, {}. Run while you can.", "Принимаю вызов, {}. Беги, пока можешь." } };
+    static std::vector<LocalizedLine> const swornEmote = {
+        { "lets out a challenging roar!", "издаёт вызывающий рёв!" },
+        { "answers your vendetta with a roar!", "отвечает на вашу клятву мести рёвом!" } };
+    std::vector<LocalizedLine> const* pool = nullptr;
     switch (moment)
     {
         case NemesisMoment::Engage: pool = talks ? (sworn ? &engageSworn : &engageSay) : &engageEmote; break;
@@ -3972,7 +4292,8 @@ void ClasslessMgr::NemesisTaunt(Player* player, Creature* copy, NemesisMark cons
         case NemesisMoment::Death:  pool = talks ? &deathSay : &deathEmote; break;
         case NemesisMoment::Sworn:  pool = talks ? &swornSay : &swornEmote; break;
     }
-    std::string line = (*pool)[urand(0, uint32(pool->size()) - 1)];
+    LocalizedLine const& linePair = (*pool)[urand(0, uint32(pool->size()) - 1)];
+    std::string line = LocaleText(player, linePair.first, linePair.second);
     if (std::size_t const at = line.find("{}"); at != std::string::npos)
         line.replace(at, 2, player->GetName());
     NemesisSay(player, copy, line, !talks);
@@ -3984,24 +4305,24 @@ bool ClasslessMgr::IsSwornCopy(Creature const* copy, Player* owner)
     return mark && mark->kind == NEMESIS_SWORN;
 }
 
-std::string ClasslessMgr::NemesisTitle(NemesisMark const& mark)
+std::string ClasslessMgr::NemesisTitle(NemesisMark const& mark, Player* player)
 {
     if (mark.kind == NEMESIS_SWORN)
-        return "Bloodsworn";
+        return LocaleText(player, "Bloodsworn", "Клятвопреступник");
     if (mark.kills >= 3)
-        return "Thrice-Victorious";
+        return LocaleText(player, "Thrice-Victorious", "Трижды победитель");
     if (mark.kills == 2)
-        return "Twice-Victorious";
+        return LocaleText(player, "Twice-Victorious", "Дважды победитель");
     switch (mark.strengths[0])
     {
-        case NS_BLOODLUST:  return "the Bloodmad";
-        case NS_IRONHIDE:   return "Ironhide";
-        case NS_SPELLWARD:  return "Spellbane";
-        case NS_VENOMOUS:   return "the Venomous";
-        case NS_UNYIELDING: return "the Unyielding";
-        case NS_WARBAND:    return "Packleader";
-        case NS_RELENTLESS: return "the Relentless";
-        default:            return "Hero-Slayer";
+        case NS_BLOODLUST:  return LocaleText(player, "the Bloodmad", "Кровожадный" );
+        case NS_IRONHIDE:   return LocaleText(player, "Ironhide", "Железношкурый");
+        case NS_SPELLWARD:  return LocaleText(player, "Spellbane", "Гроза заклинателей");
+        case NS_VENOMOUS:   return LocaleText(player, "the Venomous", "Ядовитый");
+        case NS_UNYIELDING: return LocaleText(player, "the Unyielding", "Несгибаемый");
+        case NS_WARBAND:    return LocaleText(player, "Packleader", "Вожак стаи");
+        case NS_RELENTLESS: return LocaleText(player, "the Relentless", "Неумолимый");
+        default:            return LocaleText(player, "Hero-Slayer", "Гроза героев");
     }
 }
 
@@ -4073,9 +4394,11 @@ void ClasslessMgr::GrantNemesisTrophy(Player* player, uint32 entry)
         return;
     st->nemesisPendingTrophies.push_back(entry);
     SaveNemesisRun(player->GetGUID(), *st);
-    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry);
-    Msg(player, Acore::StringFormat("Your {} waits: you carry {} trophies, or your bags are full. Destroy one, or "
-        "make room, and it comes to you.", proto ? proto->Name1 : "trophy", cfg.nemesisTrophyMax));
+    std::string const strength = NemesisStrengthName(TrophyStrength(entry), player);
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "Your {} trophy waits: you carry {} trophies, or your bags are full. Destroy one, or make room, and it comes to you.",
+        "Трофей «{}» ждёт: у вас уже {} трофеев или сумки полны. Уничтожьте один трофей или освободите место, чтобы получить новый."),
+        strength, cfg.nemesisTrophyMax));
 }
 
 namespace
@@ -4157,7 +4480,9 @@ void ClasslessMgr::ApplyNemesisFx(Player* player)
             if (Item* charm = Item::CreateItem(NEMESIS_CHARM, 1, player))
             {
                 charm->SaveToDB(trans);
-                MailDraft("Nemesis Charm", "Your bags were full. Your Nemesis Charm works from your bags: take it from this mail.")
+                MailDraft(LocaleText(player, "Nemesis Charm", "Талисман Немезиды"),
+                    LocaleText(player, "Your bags were full. Your Nemesis Charm works from your bags: take it from this mail.",
+                        "Ваши сумки были полны. Талисман Немезиды действует, пока находится в сумках. Заберите его из этого письма."))
                     .AddItem(charm)
                     .SendMailTo(trans, player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
             }
@@ -4242,12 +4567,15 @@ void ClasslessMgr::EndNemesisTrophies(Player* player, bool finished)
                 uint8 const before = st->charmRanks[s];
                 st->charmRanks[s] = uint8(std::min<uint32>(uint32(before) + best[s], NEMESIS_CHARM_MAX_RANK));
                 if (st->charmRanks[s] != before)
-                    gained += Acore::StringFormat("{}{} {} to {}", gained.empty() ? "" : ", ",
-                        NemesisStrengthName(s), uint32(before), uint32(st->charmRanks[s]));
+                    gained += Acore::StringFormat(LocaleText(player, "{}{} {} to {}", "{}{}: ранг {} → {}"),
+                        gained.empty() ? "" : ", ", NemesisStrengthName(s, player),
+                        uint32(before), uint32(st->charmRanks[s]));
             }
         SaveNemesisCharm(player->GetGUID(), *st);
         if (!gained.empty())
-            Msg(player, Acore::StringFormat("|cffffd100Your trophies merge into your Nemesis Charm.|r {}.", gained));
+            Msg(player, Acore::StringFormat(LocaleText(player,
+                "|cffffd100Your trophies merge into your Nemesis Charm.|r {}.",
+                "|cffffd100Трофеи усилили Талисман Немезиды.|r {}."), gained));
     }
     for (uint32 entry = NEMESIS_TROPHY_FIRST; entry <= NEMESIS_TROPHY_LAST; ++entry)
         if (uint32 const held = player->GetItemCount(entry, true))
@@ -4273,9 +4601,10 @@ void ClasslessMgr::PushNemesisList(Player* player)
             strengths.clear();
             for (uint8 s : mark.strengths)
                 if (s != NS_NONE)
-                    strengths += (strengths.empty() ? "" : "/") + std::string(NemesisStrengthName(s));
+                    strengths += (strengths.empty() ? "" : "/") + NemesisStrengthName(s, player);
         }
-        std::string const weakness = (mark.learned & NEMESIS_LEARNED_WEAKNESS) ? NemesisWeaknessName(mark.weakness) : "?";
+        std::string const weakness = (mark.learned & NEMESIS_LEARNED_WEAKNESS)
+            ? NemesisWeaknessName(mark.weakness, player) : "?";
         // where it lives, as the world map draws it: its zone's name and the
         // spot on that zone's map in percent (0 0 when it has no zone map).
         // The zone is read from the Hero's own map, never another's: that
@@ -4289,7 +4618,11 @@ void ClasslessMgr::PushNemesisList(Player* player)
         if (data && mark.zone)
         {
             if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(mark.zone))
-                zoneName = area->area_name[0];
+            {
+                LocaleConstant locale = player->GetSession()->GetSessionDbcLocale();
+                zoneName = area->area_name[locale] && *area->area_name[locale]
+                    ? area->area_name[locale] : area->area_name[LOCALE_enUS];
+            }
             float mx = data->posX, my = data->posY;
             Map2ZoneCoordinates(mx, my, mark.zone);
             if (mx >= 0.0f && mx <= 100.0f && my >= 0.0f && my <= 100.0f)   // unmoved: no zone map
@@ -4299,7 +4632,9 @@ void ClasslessMgr::PushNemesisList(Player* player)
             }
         }
         lines.push_back(Acore::StringFormat("NL|{}|{}|{}|{}|{}|{}|{}|{:.1f}|{:.1f}",
-            tmpl ? tmpl->Name : "Unknown", NemesisTitle(mark), mark.kind == NEMESIS_SWORN ? "Sworn" : "Marked",
+            CreatureNameFor(player, mark.entry), NemesisTitle(mark, player),
+            LocaleText(player, mark.kind == NEMESIS_SWORN ? "Sworn" : "Marked",
+                       mark.kind == NEMESIS_SWORN ? "Призванная" : "Отмеченная"),
             uint32(NemesisCopyLevel(player, mark) > player->GetLevel() ? NemesisCopyLevel(player, mark) - player->GetLevel() : 0),
             strengths, weakness, zoneName, x, y));
     }
@@ -4434,16 +4769,19 @@ std::string ClasslessMgr::MarkNemesis(Player* player, Creature* killer)
         PushNemesisGuids(player);   // its title can change with the kill
         PushRunTracker(player);
         return itr->second.StrengthCount() > before
-            ? Acore::StringFormat("{} has beaten you again. It grows, and it is stronger.", killer->GetName())
-            : Acore::StringFormat("{} has beaten you again, and grows.", killer->GetName());
+            ? Acore::StringFormat(LocaleText(player, "{} has beaten you again. It grows, and it is stronger.",
+                "{} снова победило вас. Немезида выросла и стала сильнее."), CreatureNameFor(player, killer->GetEntry()))
+            : Acore::StringFormat(LocaleText(player, "{} has beaten you again, and grows.",
+                "{} снова победило вас и выросло."), CreatureNameFor(player, killer->GetEntry()));
     }
 
     if (killer->IsPet() || killer->IsTotem() || killer->GetOwnerGUID() || !killer->GetSpawnId())
         return "";
     if (killer->GetMap()->IsDungeon())
-        return "Deaths in dungeons and raids make no nemesis.";
+        return LocaleText(player, "Deaths in dungeons and raids make no nemesis.",
+                          "Смерти в подземельях и рейдах не создают Немезиду.");
     if (killer->isElite() || killer->isWorldBoss() || killer->IsDungeonBoss())
-        return "Elites and bosses make no nemesis.";
+        return LocaleText(player, "Elites and bosses make no nemesis.", "Элитные противники и боссы не становятся Немезидой.");
 
     bool const fresh = !st.nemeses.count(killer->GetSpawnId());
     NemesisMark& mark = st.nemeses[killer->GetSpawnId()];
@@ -4464,9 +4802,12 @@ std::string ClasslessMgr::MarkNemesis(Player* player, Creature* killer)
     ApplyNemesisTo(killer, mark);   // the original is hidden from this Hero from now on
     uint32 const level = NemesisCopyLevel(player, mark);
     if (!fresh)
-        return Acore::StringFormat("{} has beaten you again, and grows.", killer->GetName());
-    return Acore::StringFormat("{} is your nemesis now. It waits for you where it lives, a level {} rare elite.",
-                               killer->GetName(), level);
+        return Acore::StringFormat(LocaleText(player, "{} has beaten you again, and grows.",
+            "{} снова победило вас и выросло."), CreatureNameFor(player, killer->GetEntry()));
+    return Acore::StringFormat(LocaleText(player,
+        "{} is your nemesis now. It waits for you where it lives, a level {} rare elite.",
+        "{} теперь ваша Немезида. Это редкий элитный противник {} уровня, который ждёт вас в своём логове."),
+        CreatureNameFor(player, killer->GetEntry()), level);
 }
 
 bool ClasslessMgr::ApplyNemesis(Player* player, Creature* creature)
@@ -4525,16 +4866,21 @@ void ClasslessMgr::NemesisSlain(Player* player, Creature* creature)
     uint32 const trophy = trophyStrength ? NEMESIS_TROPHY_FIRST + (trophyStrength - 1) * 3 + (std::max<uint8>(stars, 1) - 1) : 0;
     if (trophy)
         GrantNemesisTrophy(player, trophy);
-    PushAddon(player, Acore::StringFormat("NK|{}|{}|{}|{}|{}|{}|{}", creature->GetName(), back, bonus, vengeance,
+    PushAddon(player, Acore::StringFormat("NK|{}|{}|{}|{}|{}|{}|{}", CreatureNameFor(player, creature->GetEntry()), back, bonus, vengeance,
         st->nemesisVengeance, cfg.nemesisVengeanceToFinish, trophy));
 
     if (back)
-        Msg(player, Acore::StringFormat("|cff00ff00Your nemesis is dead.|r {} falls. The {} experience it took comes "
-            "back to you, and {} more for the kill.", creature->GetName(), back, bonus));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "|cff00ff00Your nemesis is dead.|r {} falls. The {} experience it took comes back to you, and {} more for the kill.",
+            "|cff00ff00Ваша Немезида погибла.|r {} повержено. Вы вернули {} отнятого опыта и получили ещё {} за победу."),
+            CreatureNameFor(player, creature->GetEntry()), back, bonus));
     else
-        Msg(player, Acore::StringFormat("|cff00ff00Your nemesis is dead.|r {} falls, and the kill is worth {} more "
-            "experience.", creature->GetName(), bonus));
-    Msg(player, Acore::StringFormat("Vengeance |cffffd100+{}|r: {} of {}.", vengeance, st->nemesisVengeance,
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "|cff00ff00Your nemesis is dead.|r {} falls, and the kill is worth {} more experience.",
+            "|cff00ff00Ваша Немезида погибла.|r {} повержено. Вы получили ещё {} опыта за победу."),
+            CreatureNameFor(player, creature->GetEntry()), bonus));
+    Msg(player, Acore::StringFormat(LocaleText(player, "Vengeance |cffffd100+{}|r: {} of {}.",
+        "Возмездие |cffffd100+{}|r: {} из {}."), vengeance, st->nemesisVengeance,
         cfg.nemesisVengeanceToFinish));
     PushRunTracker(player);
 
@@ -4606,8 +4952,9 @@ void ClasslessMgr::NemesisTick(Player* player)
         st->nemesisOldXp = 0;
         SaveNemeses(player->GetGUID(), *st);   // and the old rows go
         player->GiveXP(back, nullptr);
-        Msg(player, Acore::StringFormat("Your old nemesis marks are lifted, and the {} experience they took "
-            "comes back to you.", back));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "Your old nemesis marks are lifted, and the {} experience they took comes back to you.",
+            "Старые метки Немезиды сняты. Вы вернули {} отнятого ими опыта."), back));
         PushRunTracker(player);
     }
 
@@ -4694,7 +5041,7 @@ void ClasslessMgr::PushNemesisGuids(Player* player)
                 auto const mark = st->nemeses.find(spawnId);
                 if (copy->IsAlive() && mark != st->nemeses.end() && list.size() < 200)
                     list += Acore::StringFormat("{}0x{:016X}={}", list.empty() ? "" : ",", guid.GetRawValue(),
-                                                NemesisTitle(mark->second));
+                                                NemesisTitle(mark->second, player));
             }
     }
     if (list == st->nemesisGuidsSent)
@@ -4709,47 +5056,61 @@ std::vector<std::string> ClasslessMgr::NemesisReport(Player* player)
     CharState* st = FindState(player);
     if (!st || st->run != uint8(ChallengeId::Nemesis))
     {
-        out.push_back("You are not on a Nemesis run.");
+        out.push_back(LocaleText(player, "You are not on a Nemesis run.", "Вы не участвуете в испытании «Немезида»."));
         return out;
     }
-    out.push_back(Acore::StringFormat("Nemeses: {}. Minimap mark spell {}: {}.", st->nemeses.size(),
-        NEMESIS_TRACK_SPELL, _nemesisTrackReady ? "ready" : "NOT READY, see the server log"));
+    out.push_back(Acore::StringFormat(LocaleText(player, "Nemeses: {}. Minimap mark spell {}: {}.",
+        "Немезид: {}. Заклинание метки на миникарте {}: {}."), st->nemeses.size(),
+        NEMESIS_TRACK_SPELL, LocaleText(player, _nemesisTrackReady ? "ready" : "NOT READY, see the server log",
+            _nemesisTrackReady ? "готово" : "НЕ ГОТОВО, см. журнал сервера")));
     float const sight = player->GetVisibilityRange();
     for (auto const& [spawnId, mark] : st->nemeses)
     {
-        CreatureTemplate const* tmpl = sObjectMgr->GetCreatureTemplate(mark.entry);
-        std::string const name = tmpl ? tmpl->Name : "Unknown";
-        out.push_back(Acore::StringFormat("{} (spawn {}): +{} levels over you, {} deaths.",
+        std::string const name = CreatureNameFor(player, mark.entry);
+        out.push_back(Acore::StringFormat(LocaleText(player, "{} (spawn {}): +{} levels over you, {} deaths.",
+            "{} (точка появления {}): на {} ур. выше вас, смертей: {}."),
             name, spawnId, uint32(mark.levels), uint32(mark.kills)));
         if (auto have = st->nemesisCopies.find(spawnId); have != st->nemesisCopies.end())
             if (Creature* copy = ObjectAccessor::GetCreature(*player, have->second))
-                out.push_back(Acore::StringFormat("  Your copy: {} {:.0f} yd, level {}, size {:.2f}, health {}/{}, "
-                    "mark aura {}, tracking flag {}, {}.",
-                    copy->IsAlive() ? "alive," : "dead,", player->GetDistance(copy), uint32(copy->GetLevel()),
+                out.push_back(Acore::StringFormat(LocaleText(player,
+                    "  Your copy: {} {:.0f} yd, level {}, size {:.2f}, health {}/{}, mark aura {}, tracking flag {}, {}.",
+                    "  Ваша копия: {}, дистанция {:.0f} ярд., уровень {}, размер {:.2f}, здоровье {}/{}, аура метки {}, флаг отслеживания {}, {}."),
+                    LocaleText(player, copy->IsAlive() ? "alive," : "dead,", copy->IsAlive() ? "жива" : "мертва"),
+                    player->GetDistance(copy), uint32(copy->GetLevel()),
                     copy->GetObjectScale(), copy->GetHealth(), copy->GetMaxHealth(),
-                    copy->HasAura(NEMESIS_TRACK_SPELL, player->GetGUID()) ? "yes" : "no",
-                    copy->HasDynamicFlag(UNIT_DYNFLAG_TRACK_UNIT) ? "set" : "not set",
-                    copy->IsInCombat() ? "in combat" : "not in combat"));
+                    LocaleText(player, copy->HasAura(NEMESIS_TRACK_SPELL, player->GetGUID()) ? "yes" : "no",
+                        copy->HasAura(NEMESIS_TRACK_SPELL, player->GetGUID()) ? "да" : "нет"),
+                    LocaleText(player, copy->HasDynamicFlag(UNIT_DYNFLAG_TRACK_UNIT) ? "set" : "not set",
+                        copy->HasDynamicFlag(UNIT_DYNFLAG_TRACK_UNIT) ? "установлен" : "не установлен"),
+                    LocaleText(player, copy->IsInCombat() ? "in combat" : "not in combat",
+                        copy->IsInCombat() ? "в бою" : "не в бою")));
         CreatureData const* data = sObjectMgr->GetCreatureData(spawnId);
         if (data && data->mapid != player->GetMapId())
         {
-            out.push_back("  On another map.");
+            out.push_back(LocaleText(player, "  On another map.", "  На другой карте."));
             continue;
         }
         auto range = player->GetMap()->GetCreatureBySpawnIdStore().equal_range(spawnId);
         if (range.first == range.second)
         {
-            out.push_back(data ? Acore::StringFormat("  Not loaded here; it spawns {:.0f} yards away.",
-                                                     player->GetDistance(data->posX, data->posY, data->posZ))
-                               : std::string("  No such spawn in the world database."));
+            out.push_back(data ? Acore::StringFormat(LocaleText(player,
+                "  Not loaded here; it spawns {:.0f} yards away.", "  Здесь не загружена; точка появления на расстоянии {:.0f} ярд."),
+                player->GetDistance(data->posX, data->posY, data->posZ))
+                               : LocaleText(player, "  No such spawn in the world database.",
+                                   "  Такая точка появления отсутствует в базе мира."));
             continue;
         }
         for (auto itr = range.first; itr != range.second; ++itr)
         {
             Creature* c = itr->second;
-            out.push_back(Acore::StringFormat("  The original (hidden from you): {} {:.0f} yd ({}), level {}.",
-                c->IsAlive() ? "alive," : "dead,", player->GetDistance(c),
-                player->IsWithinDist(c, sight) ? "in sight" : "out of sight", uint32(c->GetLevel())));
+            out.push_back(Acore::StringFormat(LocaleText(player,
+                "  The original (hidden from you): {} {:.0f} yd ({}), level {}.",
+                "  Исходное существо (скрыто от вас): {}, дистанция {:.0f} ярд. ({}), уровень {}."),
+                LocaleText(player, c->IsAlive() ? "alive," : "dead,", c->IsAlive() ? "живо" : "мертво"),
+                player->GetDistance(c),
+                LocaleText(player, player->IsWithinDist(c, sight) ? "in sight" : "out of sight",
+                    player->IsWithinDist(c, sight) ? "в поле зрения" : "вне поля зрения"),
+                uint32(c->GetLevel())));
         }
     }
     return out;
@@ -4830,7 +5191,7 @@ void ClasslessMgr::SpawnHunter(Player* player)
     if (hunter->AI())
         hunter->AI()->AttackStart(player);
     st.hunterGuid = hunter->GetGUID();
-    Msg(player, "|cffff4444A hunter has found you.|r");
+    Msg(player, LocaleText(player, "|cffff4444A hunter has found you.|r", "|cffff4444Охотник нашёл вас.|r"));
     PushRunTracker(player);
 }
 
@@ -4855,7 +5216,8 @@ void ClasslessMgr::HunterSlain(Player* player, Creature* creature)
     SaveState(player);
     // Nothing on top of the kill itself: an elite two levels up pays its own
     // XP and loot, and anything more would be a thumb on one path's scale.
-    Msg(player, "|cff00ff00The hunter is dead.|r Another will find you within 15 to 30 minutes.");
+    Msg(player, LocaleText(player, "|cff00ff00The hunter is dead.|r Another will find you within 15 to 30 minutes.",
+        "|cff00ff00Охотник погиб.|r Следующий появится через 15–30 минут."));
     PushRunTracker(player);
 }
 
@@ -4883,14 +5245,17 @@ bool ClasslessMgr::BuyScroll(Player* player, std::string* err)
 {
     if (!cfg.wcScrollBuyEnable)
     {
-        if (err) *err = "Buying scrolls is disabled on this realm.";
+        if (err) *err = LocaleText(player, "Buying scrolls is disabled on this realm.",
+                                   "Покупка свитков отключена на этом игровом мире.");
         return false;
     }
     // Below the free-reroll level every reroll is free, so scrolls are pointless
     // there -- don't let players waste coin on them yet.
     if (player->GetLevel() < cfg.wcFreeRerollLevel)
     {
-        if (err) *err = Acore::StringFormat("Rerolls are free below level {}, so you do not need scrolls yet.", cfg.wcFreeRerollLevel);
+        if (err) *err = Acore::StringFormat(LocaleText(player,
+            "Rerolls are free below level {}, so you do not need scrolls yet.",
+            "До {} уровня перебросы бесплатны, поэтому свитки пока не нужны."), cfg.wcFreeRerollLevel);
         return false;
     }
 
@@ -4898,20 +5263,22 @@ bool ClasslessMgr::BuyScroll(Player* player, std::string* err)
     uint32 costCopper = ScrollBuyCost(player->GetLevel());
     if (!player->HasEnoughMoney(int32(costCopper)))
     {
-        if (err) *err = Acore::StringFormat("A Reroll Scroll costs {}.", CopperToText(costCopper));
+        if (err) *err = Acore::StringFormat(LocaleText(player, "A Reroll Scroll costs {}.",
+            "Свиток переброса стоит {}."), CopperToText(costCopper));
         return false;
     }
 
     // Add the item first so a full bag fails before the player is charged.
     if (!player->AddItem(cfg.wcScrollItemId, 1))
     {
-        if (err) *err = "Your bags are full.";
+        if (err) *err = LocaleText(player, "Your bags are full.", "Ваши сумки полны.");
         return false;
     }
     player->ModifyMoney(-int32(costCopper));
 
-    Msg(player, Acore::StringFormat("Purchased a |cff0070ddReroll Scroll|r for |cffffd100{}|r.",
-        CopperToText(costCopper)));
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "Purchased a |cff0070ddReroll Scroll|r for |cffffd100{}|r.",
+        "Куплен |cff0070ddсвиток переброса|r за |cffffd100{}|r."), CopperToText(costCopper)));
     return true;
 }
 
@@ -5344,12 +5711,12 @@ bool ClasslessMgr::SetDisplayPower(Player* player, uint8 powerIdx, std::string* 
 {
     if (IsExempt(player))
     {
-        if (err) *err = "This character is not a Hero.";
+        if (err) *err = LocaleText(player, "This character is not a Hero.", "Этот персонаж не является Героем.");
         return false;
     }
     if (powerIdx != POWER_MANA && powerIdx != POWER_RAGE && powerIdx != POWER_ENERGY && powerIdx != 255)
     {
-        if (err) *err = "Pick mana, rage or energy.";
+        if (err) *err = LocaleText(player, "Pick mana, rage or energy.", "Выберите ману, ярость или энергию.");
         return false;
     }
 
@@ -5429,8 +5796,9 @@ uint32 ClasslessMgr::GrantRidingSkill(Player* player)
         }
         player->learnSpell(spellId);
         ++taught;
-        Msg(player, Acore::StringFormat("You have learned {}. Riding is trained for every Hero.",
-            SpellName(spellId)));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "You have learned {}. Riding is trained for every Hero.",
+            "Вы изучили способность «{}». Все Герои обучены верховой езде."), SpellName(spellId, player)));
     }
     return taught;
 }
@@ -5495,8 +5863,9 @@ uint32 ClasslessMgr::GrantRuneforging(Player* player)
         }
         player->learnSpell(spellId);
         ++taught;
-        Msg(player, Acore::StringFormat("You have learned {}. Runeforging is trained for every Hero.",
-            SpellName(spellId)));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "You have learned {}. Runeforging is trained for every Hero.",
+            "Вы изучили способность «{}». Все Герои обучены рунической ковке."), SpellName(spellId, player)));
     }
     return taught;
 }
@@ -5599,14 +5968,17 @@ bool ClasslessMgr::SetAutoShotOff(Player* player, bool off, std::string* err)
     CharState& st = GetState(player);
     if (st.exempt)
     {
-        if (err) *err = "This character does not walk the Hero's path.";
+        if (err) *err = LocaleText(player, "This character does not walk the Hero's path.", "Этот персонаж не следует пути героя.");
         return false;
     }
     st.noAutoShot = off;
     SaveState(player);
     SyncAutoShot(player);
-    Msg(player, off ? "Auto Shot is off. You will not be taught it again until you turn it back on in Settings."
-                    : "Auto Shot is back. It is taught while a bow, gun or crossbow is equipped.");
+    Msg(player, off
+        ? LocaleText(player, "Auto Shot is off. You will not be taught it again until you turn it back on in Settings.",
+                     "Автоматическая стрельба отключена. Она не будет изучена снова, пока вы не включите её в настройках.")
+        : LocaleText(player, "Auto Shot is back. It is taught while a bow, gun or crossbow is equipped.",
+                     "Автоматическая стрельба восстановлена и изучается при экипированном луке, ружье или арбалете."));
     return true;
 }
 
@@ -5849,14 +6221,15 @@ void ClasslessMgr::HandleFirstLogin(Player* player)
     {
         if (st.mode == Mode::Unchosen)
         {
-            Msg(player, "Welcome, Hero! Your race keeps its racial traits. You carry mana, rage and energy at "
-                        "once, every stat is worth having, and every spell, talent, weapon and armor type in the "
-                        "game is open to you.");
-            Msg(player, Acore::StringFormat("Choose your path before level {} in |cffffff00/cw|r or at the "
-                        "|cffffff00Hero Advancement|r NPC: Classless, where you buy every ability, or Wildcard, "
-                        "where the dice deal them. Choose nothing and you walk the {} path. This character "
-                        "keeps its path for good.", uint32(cfg.modeChoiceDeadline),
-                        cfg.defaultMode == uint8(Mode::Wildcard) ? "Wildcard" : "Classless"));
+            Msg(player, LocaleText(player,
+                "Welcome, Hero! Your race keeps its racial traits. You carry mana, rage and energy at once, every stat is worth having, and every spell, talent, weapon and armor type in the game is open to you.",
+                "Добро пожаловать, Герой! Расовые способности сохраняются. Вы используете ману, ярость и энергию, все характеристики полезны, а любые заклинания, таланты, оружие и доспехи доступны."));
+            Msg(player, Acore::StringFormat(LocaleText(player,
+                "Choose your path before level {} in |cffffff00/cw|r or at the |cffffff00Hero Advancement|r NPC: Classless, where you buy every ability, or Wildcard, where the dice deal them. Choose nothing and you walk the {} path. This character keeps its path for good.",
+                "Выберите путь до {} уровня командой |cffffff00/cw|r или у |cffffff00наставника развития героя|r: свободный путь, где вы сами покупаете способности, или случайный путь, где способности выдаются случайным образом. Если не выбрать путь, будет назначен путь «{}». Выбор останется с персонажем навсегда."),
+                uint32(cfg.modeChoiceDeadline), LocaleText(player,
+                    cfg.defaultMode == uint8(Mode::Wildcard) ? "Wildcard" : "Classless",
+                    cfg.defaultMode == uint8(Mode::Wildcard) ? "Случайный" : "Свободный")));
         }
         else
             AnnounceState(player);
@@ -5899,8 +6272,10 @@ bool ClasslessMgr::ApplyDefaultMode(Player* player)
     }
     if (cfg.announce)
         Msg(player, st.mode == Mode::Wildcard
-            ? "You did not choose a path in time, so the Wildcard chose for you. Your starting abilities have been dealt."
-            : "You did not choose a path in time, so you walk the Classless path. Spend your Ability Essence at the Hero Advancement NPC.");
+            ? LocaleText(player, "You did not choose a path in time, so the Wildcard chose for you. Your starting abilities have been dealt.",
+                         "Вы не выбрали путь вовремя, поэтому вам назначен случайный путь. Стартовые способности выданы.")
+            : LocaleText(player, "You did not choose a path in time, so you walk the Classless path. Spend your Ability Essence at the Hero Advancement NPC.",
+                         "Вы не выбрали путь вовремя, поэтому вам назначен свободный путь. Тратьте эссенцию способностей у наставника развития героя."));
     return true;
 }
 
@@ -5947,11 +6322,13 @@ void ClasslessMgr::HandleLogin(Player* player)
             st.abilities.erase(first);
             CharacterDatabase.Execute("DELETE FROM cw_char_abilities WHERE guid = {} AND first_spell = {}",
                                       player->GetGUID().GetCounter(), first);
-            std::string line = Acore::StringFormat("{} is now taught to every Hero.", SpellName(first));
+            std::string line = Acore::StringFormat(LocaleText(player, "{} is now taught to every Hero.",
+                "Способность «{}» теперь изучают все Герои."), SpellName(first, player));
             if (source == GrantSource::Rolled && st.mode == Mode::Wildcard)
             {
                 if (uint32 dealt = RollAbility(player, GrantSource::Rolled))
-                    line += Acore::StringFormat(" {} takes its place.", SpellName(dealt));
+                    line += Acore::StringFormat(LocaleText(player, " {} takes its place.", " Вместо неё вы получили «{}»."),
+                                                SpellName(dealt, player));
             }
             else if (source == GrantSource::Picked)
                 if (SpellInfo const* info = sSpellMgr->GetSpellInfo(first))
@@ -5959,7 +6336,8 @@ void ClasslessMgr::HandleLogin(Player* player)
                     uint32 const cost = cfg.abilityCostByRarity[uint8(RarityFromPower(
                         std::max(info->RecoveryTime, info->CategoryRecoveryTime), 0, uint8(info->SpellLevel)))];
                     st.abilityEssence += cost;
-                    line += Acore::StringFormat(" {} Ability Essence is back.", cost);
+                    line += Acore::StringFormat(LocaleText(player, " {} Ability Essence is back.",
+                        " Возвращено {} эссенции способностей."), cost);
                 }
             Msg(player, line);
         }
@@ -5993,9 +6371,11 @@ void ClasslessMgr::HandleLogin(Player* player)
             CharacterDatabase.Execute("DELETE FROM cw_char_talents WHERE guid = {} AND talent_id = {}",
                                       player->GetGUID().GetCounter(), talentId);
             if (!t.abilityLines.empty())
-                Msg(player, Acore::StringFormat("{} is an ability now. It is in your build{}.",
-                    SpellName(t.abilityLines[0]),
-                    st.mode == Mode::Classless ? ", and its Talent Essence is back" : ""));
+                Msg(player, Acore::StringFormat(LocaleText(player, "{} is an ability now. It is in your build{}.",
+                    "«{}» теперь способность и добавлена в вашу сборку{}."),
+                    SpellName(t.abilityLines[0], player),
+                    st.mode == Mode::Classless ? LocaleText(player, ", and its Talent Essence is back",
+                        ", возвращена эссенция талантов") : ""));
         }
     }
 
@@ -6023,11 +6403,13 @@ void ClasslessMgr::HandleLogin(Player* player)
                 refunded = cfg.talentCostPerRank * uint32(rank - t->maxRank);
                 st.talentEssence += refunded;
             }
-            std::string line = Acore::StringFormat(
+            std::string line = Acore::StringFormat(LocaleText(player,
                 "{} now has {} rank{}, so yours is set to {}.",
-                SpellName(t->rankSpells[0]), t->maxRank, t->maxRank == 1 ? "" : "s", t->maxRank);
+                "У таланта «{}» {} ранг{} максимум. Ваш ранг изменён на {}."),
+                SpellName(t->rankSpells[0], player), t->maxRank, t->maxRank == 1 ? "" : "s", t->maxRank);
             if (refunded)
-                line += Acore::StringFormat(" {} Talent Essence is back.", refunded);
+                line += Acore::StringFormat(LocaleText(player, " {} Talent Essence is back.",
+                    " Возвращено {} эссенции талантов."), refunded);
             Msg(player, line);
         }
     }
@@ -6301,8 +6683,13 @@ void ClasslessMgr::HandleLevelUp(Player* player, uint8 oldLevel)
             && lvl % cfg.wcFreeScrollEveryLevels == 0 && cfg.wcFreeScrollCount)
         {
             if (player->AddItem(cfg.wcScrollItemId, cfg.wcFreeScrollCount))
-                Msg(player, Acore::StringFormat("The Wildcard rewards your journey: {} |cff0070ddReroll Scroll{}|r.",
-                    cfg.wcFreeScrollCount, cfg.wcFreeScrollCount > 1 ? "s" : ""));
+                Msg(player, Acore::StringFormat(LocaleText(player,
+                    "The Wildcard rewards your journey: {} |cff0070ddReroll Scroll{}|r.",
+                    "Награда за случайный путь: {} |cff0070dd{}|r."),
+                    cfg.wcFreeScrollCount, IsRussian(player)
+                        ? LocaleCount(player, cfg.wcFreeScrollCount, "свиток переброса", "свитка переброса",
+                            "свиток переброса", "свитка переброса", "свитков переброса")
+                        : (cfg.wcFreeScrollCount > 1 ? "s" : "")));
         }
     }
 
@@ -6321,34 +6708,41 @@ void ClasslessMgr::HandleLevelUp(Player* player, uint8 oldLevel)
         {
             uint32 const left = cfg.nemesisVengeanceToFinish > st.nemesisVengeance
                 ? cfg.nemesisVengeanceToFinish - st.nemesisVengeance : 0;
-            Msg(player, Acore::StringFormat("|cffffd100Nemesis|r: level {} reached. Gain {} more Vengeance to finish.",
+            Msg(player, Acore::StringFormat(LocaleText(player,
+                "|cffffd100Nemesis|r: level {} reached. Gain {} more Vengeance to finish.",
+                "|cffffd100Немезида|r: достигнут {} уровень. Наберите ещё {} возмездия, чтобы завершить испытание."),
                 uint32(newLevel), left));
         }
     }
 
     if (uint32 freed = ClearStaleLocks(player))
-        Msg(player, Acore::StringFormat(
-            "Your starting hand is over, so {} {} off. From here you reroll one "
-            "ability at a time, and only the one you choose.",
-            freed, freed == 1 ? "padlock comes" : "padlocks come"));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "Your starting hand is over, so {} {} off. From here you reroll one ability at a time, and only the one you choose.",
+            "Стартовая раздача завершена. Снято блокировок: {} {}. Теперь можно перебрасывать способности по одной, выбирая их самостоятельно."),
+            freed, LocaleText(player, freed == 1 ? "padlock comes" : "padlocks come", "")));
 
     if (st.mode == Mode::Classless && st.archetype)
     {
         FollowResult got = FollowArchetype(player);
-        std::string name = ArchetypeName(st);
+        std::string name = ArchetypeName(st, player);
         if (!got.learned.empty())
-            Msg(player, Acore::StringFormat("|cffffff00{}|r: learned {}.", name, JoinNames(got.learned)));
+            Msg(player, Acore::StringFormat(LocaleText(player, "|cffffff00{}|r: learned {}.",
+                "|cffffff00{}|r: изучено: {}."), name, JoinNames(got.learned)));
         if (got.talentRanks)
-            Msg(player, Acore::StringFormat("|cffffff00{}|r: {} talent rank{} bought.", name,
-                got.talentRanks, got.talentRanks == 1 ? "" : "s"));
+            Msg(player, Acore::StringFormat(LocaleText(player, "|cffffff00{}|r: {} talent rank{} bought.",
+                "|cffffff00{}|r: куплено рангов талантов: {}{}."), name,
+                got.talentRanks, IsRussian(player) ? "" : (got.talentRanks == 1 ? "" : "s")));
         if (!got.stalled.empty())
-            Msg(player, Acore::StringFormat("|cffffff00{}|r: {} is next and waits for Ability Essence.",
+            Msg(player, Acore::StringFormat(LocaleText(player, "|cffffff00{}|r: {} is next and waits for Ability Essence.",
+                "|cffffff00{}|r: следующая способность — {}; нужно накопить эссенцию способностей."),
                 name, JoinNames(got.stalled)));
     }
     SaveState(player);
 
     if (st.mode == Mode::Classless && newLevel >= cfg.essenceStartLevel && cfg.announce)
-        Msg(player, Acore::StringFormat("You now have |cff00ff00{}|r Ability Essence and |cff00ff00{}|r Talent Essence.",
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "You now have |cff00ff00{}|r Ability Essence and |cff00ff00{}|r Talent Essence.",
+            "Теперь у вас |cff00ff00{}|r эссенции способностей и |cff00ff00{}|r эссенции талантов."),
             st.abilityEssence, st.talentEssence));
 
     // Last, and unconditionally: base mana rose with the level, so every spell
@@ -6365,21 +6759,23 @@ bool ClasslessMgr::SetMode(Player* player, Mode mode, std::string* err)
 
     if (st.exempt)
     {
-        if (err) *err = "This character is not a Hero.";
+        if (err) *err = LocaleText(player, "This character is not a Hero.", "Этот персонаж не является Героем.");
         return false;
     }
 
     if (st.mode == mode)
     {
-        if (err) *err = "That is already your path.";
+        if (err) *err = LocaleText(player, "That is already your path.", "Вы уже выбрали этот путь.");
         return false;
     }
 
     if (st.mode != Mode::Unchosen || player->GetLevel() >= cfg.modeChoiceDeadline)
     {
         if (err) *err = st.mode != Mode::Unchosen
-            ? std::string("Your path is locked in. A character keeps the path it chose.")
-            : Acore::StringFormat("A path must be chosen before level {}.", cfg.modeChoiceDeadline);
+            ? LocaleText(player, "Your path is locked in. A character keeps the path it chose.",
+                         "Ваш путь уже закреплён. Выбор сохраняется за персонажем.")
+            : Acore::StringFormat(LocaleText(player, "A path must be chosen before level {}.",
+                "Путь нужно выбрать до {} уровня."), cfg.modeChoiceDeadline);
         return false;
     }
 
@@ -6390,13 +6786,17 @@ bool ClasslessMgr::SetMode(Player* player, Mode mode, std::string* err)
         GrantGuard noReveal(_revealSuppress); // the starting hand UI shows these
         for (uint32 i = 0; i < cfg.wcStartingAbilities; ++i)
             RollAbility(player);
-        Msg(player, Acore::StringFormat("The Wildcard has been drawn! You received random starting abilities. "
-                    "Reroll them for free in /cw or at the Hero Advancement NPC until level {}.", cfg.wcFreeRerollLevel));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "The Wildcard has been drawn! You received random starting abilities. Reroll them for free in /cw or at the Hero Advancement NPC until level {}.",
+            "Случайный путь выбран! Вы получили стартовые способности. До {} уровня их можно бесплатно перебрасывать командой /cw или у наставника развития героя."),
+            cfg.wcFreeRerollLevel));
     }
     else
     {
         PayMissedEssence(st, cfg, player->GetLevel());
-        Msg(player, Acore::StringFormat("Classless path chosen. You have |cff00ff00{}|r Ability Essence to spend.", st.abilityEssence));
+        Msg(player, Acore::StringFormat(LocaleText(player,
+            "Classless path chosen. You have |cff00ff00{}|r Ability Essence to spend.",
+            "Выбран свободный путь. Доступно |cff00ff00{}|r эссенции способностей."), st.abilityEssence));
     }
 
     SaveState(player);
@@ -6407,12 +6807,14 @@ void ClasslessMgr::AnnounceState(Player* player)
 {
     CharState& st = GetState(player);
     if (st.mode == Mode::Classless)
-        Msg(player, Acore::StringFormat(
+        Msg(player, Acore::StringFormat(LocaleText(player,
             "Classless Hero. Abilities: {}, talents: {}, Ability Essence: |cff00ff00{}|r, Talent Essence: |cff00ff00{}|r.",
+            "Герой свободного пути. Способностей: {}, талантов: {}, эссенция способностей: |cff00ff00{}|r, эссенция талантов: |cff00ff00{}|r."),
             st.abilities.size(), st.talents.size(), st.abilityEssence, st.talentEssence));
     else if (st.mode == Mode::Wildcard)
-        Msg(player, Acore::StringFormat(
+        Msg(player, Acore::StringFormat(LocaleText(player,
             "Wildcard Hero. Abilities: {}, talents: {}. Reroll charges: |cff00ff00{}|r.",
+            "Герой случайного пути. Способностей: {}, талантов: {}. Заряды переброса: |cff00ff00{}|r."),
             st.abilities.size(), st.talents.size(), st.rerolls));
 }
 
@@ -6443,8 +6845,9 @@ void ClasslessMgr::GrantAbilityInternal(Player* player, AbilityEntry const& e, G
             player->GetGUID().GetCounter(), e.firstSpellId, uint32(source));
 
     if (announce && !_revealSuppress)
-        Msg(player, Acore::StringFormat("You gained the ability {}{}|r ({}).",
-            RarityColor(e.rarity), SpellName(e.firstSpellId), RarityName(e.rarity)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "You gained the ability {}{}|r ({}).",
+            "Вы получили {}{}|r способность ({})."), RarityColor(e.rarity), SpellName(e.firstSpellId, player),
+            RarityName(e.rarity, player)));
 
     GrantFormKit(player, e);
     GrantRequiredForm(player, e);
@@ -6530,12 +6933,12 @@ void ClasslessMgr::GrantKit(Player* player, std::vector<uint32> const& ownedSpel
             if (GetState(player).abilities.count(companion->firstSpellId))
                 continue;
             GrantAbilityInternal(player, *companion, GrantSource::Companion, true, false);
-            gained.push_back(SpellName(companion->firstSpellId));
+            gained.push_back(SpellName(companion->firstSpellId, player));
         }
         else if (!player->HasSpell(spellId))
         {
             player->learnSpell(spellId);
-            gained.push_back(SpellName(spellId));
+            gained.push_back(SpellName(spellId, player));
         }
     }
 
@@ -6548,8 +6951,8 @@ void ClasslessMgr::GrantKit(Player* player, std::vector<uint32> const& ownedSpel
     std::string list = gained[0];
     for (size_t i = 1; i < gained.size(); ++i)
         list += (i + 1 == gained.size() ? " and " : ", ") + gained[i];
-    Msg(player, Acore::StringFormat("{} comes with {}, yours to use straight away.",
-        SpellName(ownerSpellId), list));
+    Msg(player, Acore::StringFormat(LocaleText(player, "{} comes with {}, yours to use straight away.",
+        "Вместе со способностью «{}» вы сразу получаете: {}."), SpellName(ownerSpellId, player), list));
 }
 
 // Is this free extra still earning its place?
@@ -6658,8 +7061,10 @@ uint32 ClasslessMgr::PruneCompanions(Player* player)
         if (AbilityEntry const* e = GetAbility(firstSpell))
         {
             RemoveAbilityInternal(player, *e);
-            Msg(player, Acore::StringFormat("{} came free with an ability you no longer have, so it goes too.",
-                SpellName(firstSpell)));
+            Msg(player, Acore::StringFormat(LocaleText(player,
+                "{} came free with an ability you no longer have, so it goes too.",
+                "«{}» была получена бесплатно вместе с забытой способностью, поэтому она тоже забыта."),
+                SpellName(firstSpell, player)));
         }
     return uint32(drop.size());
 }
@@ -6903,8 +7308,8 @@ void ClasslessMgr::DismissOrphanedSummons(Player* player)
     if (!needed || player->HasSpell(needed))
         return;
 
-    Msg(player, Acore::StringFormat("{} is dismissed: you no longer know {}.",
-        pet->GetName(), SpellName(needed)));
+    Msg(player, Acore::StringFormat(LocaleText(player, "{} is dismissed: you no longer know {}.",
+        "{} отправлен обратно: вы больше не знаете «{}»."), pet->GetName(), SpellName(needed, player)));
     pet->Remove(PET_SAVE_NOT_IN_SLOT);
 }
 
@@ -7277,8 +7682,10 @@ void ClasslessMgr::GrantTalentRankInternal(Player* player, TalentPoolEntry const
     // the rank drives the rarity, so the chat line matches the reveal popup
     Rarity shown = RankRarity(t, newRank);
     if (!_revealSuppress)
-        Msg(player, Acore::StringFormat("Talent: {}{}|r rank {}/{} ({}).",
-            RarityColor(shown), SpellName(t.rankSpells[newRank - 1]), newRank, uint32(t.maxRank), RarityName(shown)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "Talent: {}{}|r rank {}/{} ({}).",
+            "Талант: {}{}|r ранг {}/{} ({})."),
+            RarityColor(shown), SpellName(t.rankSpells[newRank - 1], player), newRank, uint32(t.maxRank),
+            RarityName(shown, player)));
 
     // Whatever this talent cannot be used without: the kit, and the stance or
     // form it is locked to. Safe to run on every rank -- both skip anything
@@ -7734,8 +8141,10 @@ bool ClasslessMgr::BuyAbility(Player* player, uint32 firstSpellId, std::string* 
     if (st.mode != Mode::Classless)
     {
         if (err) *err = st.mode == Mode::Wildcard
-            ? "Wildcard Heroes cannot pick abilities. The Wildcard picks for you, and you reroll what you dislike."
-            : "Choose your path first (Hero Advancement NPC or .classless mode).";
+            ? LocaleText(player, "Wildcard Heroes cannot pick abilities. The Wildcard picks for you, and you reroll what you dislike.",
+                         "Герои случайного пути не выбирают способности: они получают их автоматически, а ненужные можно перебросить.")
+            : LocaleText(player, "Choose your path first (Hero Advancement NPC or .classless mode).",
+                         "Сначала выберите путь у наставника развития героя или командой .classless mode.");
         return false;
     }
     AbilityEntry const* e = GetAbility(firstSpellId);
@@ -7745,29 +8154,33 @@ bool ClasslessMgr::BuyAbility(Player* player, uint32 firstSpellId, std::string* 
     if (!e || !e->enabled)
     {
         if (err) *err = sSpellMgr->GetSpellInfo(firstSpellId)
-            ? Acore::StringFormat("{} is not a Hero ability.", SpellName(firstSpellId))
-            : std::string("No Hero ability has that ID.");
+            ? Acore::StringFormat(LocaleText(player, "{} is not a Hero ability.", "«{}» не является способностью героя."),
+                                  SpellName(firstSpellId, player))
+            : LocaleText(player, "No Hero ability has that ID.", "Способность героя с таким идентификатором не найдена.");
         return false;
     }
     if (e->variant && !cfg.elementalInPool)
     {
-        if (err) *err = "Elemental variants are not available on this realm.";
+        if (err) *err = LocaleText(player, "Elemental variants are not available on this realm.",
+            "Элементальные варианты способностей недоступны на этом игровом мире.");
         return false;
     }
     if (st.abilities.count(e->firstSpellId))
     {
-        if (err) *err = "You already know that ability.";
+        if (err) *err = LocaleText(player, "You already know that ability.", "Вы уже знаете эту способность.");
         return false;
     }
     if (cfg.respectLevelReqs && !e->rankLevels.empty() && e->rankLevels[0] > player->GetLevel())
     {
-        if (err) *err = Acore::StringFormat("That ability requires level {}.", uint32(e->rankLevels[0]));
+        if (err) *err = Acore::StringFormat(LocaleText(player, "That ability requires level {}.",
+            "Для этой способности требуется {} уровень."), uint32(e->rankLevels[0]));
         return false;
     }
     uint32 cost = AbilityCost(*e);
     if (st.abilityEssence < cost)
     {
-        if (err) *err = Acore::StringFormat("Not enough Ability Essence ({} needed, {} available).", cost, st.abilityEssence);
+        if (err) *err = Acore::StringFormat(LocaleText(player, "Not enough Ability Essence ({} needed, {} available).",
+        "Недостаточно эссенции способностей: требуется {}, доступно {}."), cost, st.abilityEssence);
         return false;
     }
 
@@ -7782,7 +8195,8 @@ bool ClasslessMgr::UnlearnAbility(Player* player, uint32 firstSpellId, std::stri
     CharState& st = GetState(player);
     if (st.mode != Mode::Classless)
     {
-        if (err) *err = "Unlearning is a Classless-path feature. Wildcard Heroes reroll instead.";
+        if (err) *err = LocaleText(player, "Unlearning is a Classless-path feature. Wildcard Heroes reroll instead.",
+            "Забывание способностей доступно на свободном пути; герои случайного пути могут перебрасывать их.");
         return false;
     }
     AbilityEntry const* e = GetAbility(firstSpellId);
@@ -7791,26 +8205,29 @@ bool ClasslessMgr::UnlearnAbility(Player* player, uint32 firstSpellId, std::stri
 
     if (!e || !st.abilities.count(e->firstSpellId))
     {
-        if (err) *err = "You do not own that ability.";
+        if (err) *err = LocaleText(player, "You do not own that ability.", "У вас нет этой способности.");
         return false;
     }
     if (st.abilities[e->firstSpellId].source == GrantSource::Talent)
     {
-        if (err) *err = "That ability came with a talent and leaves with it. Respec to give it up.";
+        if (err) *err = LocaleText(player, "That ability came with a talent and leaves with it. Respec to give it up.",
+            "Эта способность получена вместе с талантом и исчезнет вместе с ним. Сбросьте таланты, чтобы отказаться от неё.");
         return false;
     }
     // A companion cost nothing, so there is nothing to refund and nothing to
     // decide: it goes when the ability that brought it in goes.
     if (st.abilities[e->firstSpellId].source == GrantSource::Companion)
     {
-        if (err) *err = "That came free with another ability. Unlearn the one it came with instead.";
+        if (err) *err = LocaleText(player, "That came free with another ability. Unlearn the one it came with instead.",
+            "Эта способность получена бесплатно вместе с другой. Забудьте исходную способность.");
         return false;
     }
     // An heirloom cost nothing this life either, and it is the one thing a
     // Rebirth promised would stay.
     if (st.abilities[e->firstSpellId].source == GrantSource::Heirloom)
     {
-        if (err) *err = "That is an heirloom carried through Rebirth. It stays with you.";
+        if (err) *err = LocaleText(player, "That is an heirloom carried through Rebirth. It stays with you.",
+            "Это унаследованная способность, сохранённая при Перерождении. Она останется с вами.");
         return false;
     }
 
@@ -7819,7 +8236,8 @@ bool ClasslessMgr::UnlearnAbility(Player* player, uint32 firstSpellId, std::stri
         st.abilityEssence += AbilityCost(*e);
     PruneCompanions(player);
     SaveState(player);
-    Msg(player, Acore::StringFormat("Unlearned {}.", SpellName(e->firstSpellId)));
+    Msg(player, Acore::StringFormat(LocaleText(player, "Unlearned {}.", "Забыта способность «{}»."),
+                                    SpellName(e->firstSpellId, player)));
     return true;
 }
 
@@ -7828,18 +8246,19 @@ bool ClasslessMgr::UnlearnTalent(Player* player, uint32 talentId, std::string* e
     CharState& st = GetState(player);
     if (st.mode != Mode::Classless)
     {
-        if (err) *err = "Unlearning is a Classless-path feature. Wildcard Heroes reroll instead.";
+        if (err) *err = LocaleText(player, "Unlearning is a Classless-path feature. Wildcard Heroes reroll instead.",
+            "Забывание способностей доступно на свободном пути; герои случайного пути могут перебрасывать их.");
         return false;
     }
     TalentPoolEntry const* t = GetTalent(talentId);
     auto owned = t ? st.talents.find(talentId) : st.talents.end();
     if (!t || owned == st.talents.end())
     {
-        if (err) *err = "You do not own that talent.";
+        if (err) *err = LocaleText(player, "You do not own that talent.", "У вас нет этого таланта.");
         return false;
     }
     uint8 const ranks = owned->second;
-    std::string const name = SpellName(t->rankSpells[0]);
+    std::string const name = SpellName(t->rankSpells[0], player);
     RemoveTalentInternal(player, *t);
     // what was paid: the first rank only under the flat price, every rank otherwise
     if (cfg.refundOnUnlearn)
@@ -7849,7 +8268,7 @@ bool ClasslessMgr::UnlearnTalent(Player* player, uint32 talentId, std::string* e
     // unlearning an ability does.
     PruneCompanions(player);
     SaveState(player);
-    Msg(player, Acore::StringFormat("Unlearned {}.", name));
+    Msg(player, Acore::StringFormat(LocaleText(player, "Unlearned {}.", "Забыт талант «{}»."), name));
     return true;
 }
 
@@ -7859,14 +8278,16 @@ bool ClasslessMgr::BuyTalentRank(Player* player, uint32 talentId, std::string* e
     if (st.mode != Mode::Classless)
     {
         if (err) *err = st.mode == Mode::Wildcard
-            ? "Wildcard Heroes cannot pick talents. The Wildcard picks for you."
-            : "Choose your path first (Hero Advancement NPC or .classless mode).";
+            ? LocaleText(player, "Wildcard Heroes cannot pick talents. The Wildcard picks for you.",
+                         "Герои случайного пути не выбирают таланты: они получают их автоматически.")
+            : LocaleText(player, "Choose your path first (Hero Advancement NPC or .classless mode).",
+                         "Сначала выберите путь у наставника развития героя или командой .classless mode.");
         return false;
     }
     TalentPoolEntry const* t = GetTalent(talentId);
     if (!t || !t->enabled)
     {
-        if (err) *err = "Unknown talent.";
+        if (err) *err = LocaleText(player, "Unknown talent.", "Неизвестный талант.");
         return false;
     }
 
@@ -7876,7 +8297,7 @@ bool ClasslessMgr::BuyTalentRank(Player* player, uint32 talentId, std::string* e
 
     if (ownedRank >= t->maxRank)
     {
-        if (err) *err = "That talent is already at max rank.";
+        if (err) *err = LocaleText(player, "That talent is already at max rank.", "Этот талант уже достиг максимального ранга.");
         return false;
     }
     // A talent costs one point, not one per rank: only the first rank is
@@ -7884,7 +8305,8 @@ bool ClasslessMgr::BuyTalentRank(Player* player, uint32 talentId, std::string* e
     uint32 cost = (cfg.talentFlatCost && ownedRank > 0) ? 0 : cfg.talentCostPerRank;
     if (st.talentEssence < cost)
     {
-        if (err) *err = Acore::StringFormat("Not enough Talent Essence ({} needed, {} available).", cost, st.talentEssence);
+        if (err) *err = Acore::StringFormat(LocaleText(player, "Not enough Talent Essence ({} needed, {} available).",
+        "Недостаточно эссенции талантов: требуется {}, доступно {}."), cost, st.talentEssence);
         return false;
     }
     // No points-in-tree gate. A class character banks points in one tree and
@@ -7899,7 +8321,8 @@ bool ClasslessMgr::BuyTalentRank(Player* player, uint32 talentId, std::string* e
     // the schedule is set to.
     if (cfg.respectLevelReqs && player->GetLevel() < 10 + t->row * 5)
     {
-        if (err) *err = Acore::StringFormat("That talent tier requires level {}.", 10 + t->row * 5);
+        if (err) *err = Acore::StringFormat(LocaleText(player, "That talent tier requires level {}.",
+            "Для этого уровня таланта требуется {} уровень персонажа."), 10 + t->row * 5);
         return false;
     }
 
@@ -7914,7 +8337,8 @@ bool ClasslessMgr::Respec(Player* player, std::string* err)
     CharState& st = GetState(player);
     if (st.mode != Mode::Classless)
     {
-        if (err) *err = "Respec is only available on the Classless path (Wildcard Heroes reroll instead).";
+        if (err) *err = LocaleText(player, "Respec is only available on the Classless path (Wildcard Heroes reroll instead).",
+            "Сброс доступен только на свободном пути; герои случайного пути могут перебрасывать способности.");
         return false;
     }
 
@@ -7949,12 +8373,15 @@ bool ClasslessMgr::Respec(Player* player, std::string* err)
         + st.rebirths * cfg.rebirthLegacyTalentEssence;
     if (st.archetype)
     {
-        Msg(player, Acore::StringFormat("You no longer follow |cffffff00{}|r.", ArchetypeName(st)));
+        Msg(player, Acore::StringFormat(LocaleText(player, "You no longer follow |cffffff00{}|r.",
+            "Вы больше не следуете архетипу |cffffff00{}|r."), ArchetypeName(st, player)));
         st.archetype = 0;
     }
 
     SaveState(player);
-    Msg(player, Acore::StringFormat("Respec complete. Ability Essence: |cff00ff00{}|r, Talent Essence: |cff00ff00{}|r.",
+    Msg(player, Acore::StringFormat(LocaleText(player,
+        "Respec complete. Ability Essence: |cff00ff00{}|r, Talent Essence: |cff00ff00{}|r.",
+        "Сброс завершён. Эссенция способностей: |cff00ff00{}|r, эссенция талантов: |cff00ff00{}|r."),
         st.abilityEssence, st.talentEssence));
     // Everything is gone, so every class line is provably empty: clear
     // them now rather than leave stale empty tabs until the next login.
@@ -8002,7 +8429,8 @@ bool ClasslessMgr::SetStatAllocation(Player* player, std::array<uint32, 5> const
 {
     if (!cfg.statsEnable)
     {
-        if (err) *err = "Stat allocation is disabled on this realm.";
+        if (err) *err = LocaleText(player, "Stat allocation is disabled on this realm.",
+                                   "Распределение характеристик отключено на этом игровом мире.");
         return false;
     }
 
@@ -8013,7 +8441,8 @@ bool ClasslessMgr::SetStatAllocation(Player* player, std::array<uint32, 5> const
     uint32 budget = StatBudget(player);
     if (total > budget)
     {
-        if (err) *err = Acore::StringFormat("That allocation needs {} points but you have {}.", total, budget);
+        if (err) *err = Acore::StringFormat(LocaleText(player, "That allocation needs {} points but you have {}.",
+            "Для такого распределения нужно {} очков, у вас есть {}."), total, budget);
         return false;
     }
 
@@ -8022,8 +8451,9 @@ bool ClasslessMgr::SetStatAllocation(Player* player, std::array<uint32, 5> const
     ApplyStatMods(player);
     SaveState(player);
 
-    Msg(player, Acore::StringFormat(
+    Msg(player, Acore::StringFormat(LocaleText(player,
         "Stats allocated. STR +{}, AGI +{}, STA +{}, INT +{}, SPI +{} ({} of {} points).",
+        "Характеристики распределены. СИЛ +{}, ЛОВ +{}, ВЫН +{}, ИНТ +{}, ДУХ +{} ({} из {} очков)."),
         alloc[0] * cfg.statValuePerPoint, alloc[1] * cfg.statValuePerPoint, alloc[2] * cfg.statValuePerPoint,
         alloc[3] * cfg.statValuePerPoint, alloc[4] * cfg.statValuePerPoint, total, budget));
     return true;
@@ -8225,8 +8655,9 @@ uint32 ClasslessMgr::RollAbility(Player* player, GrantSource source)
     {
         st.pity = 0;
         if (!_revealSuppress)
-            Msg(player, Acore::StringFormat("|cff00ff88Synergy roll!|r {} fits the abilities you already own.",
-                SpellName(chosen->firstSpellId)));
+            Msg(player, Acore::StringFormat(LocaleText(player, "|cff00ff88Synergy roll!|r {} fits the abilities you already own.",
+                "|cff00ff88Сработала синергия!|r Способность «{}» подходит к вашей сборке."),
+                SpellName(chosen->firstSpellId, player)));
     }
 
     // The pool is built to exclude everything owned, so this can only fire if
@@ -8235,7 +8666,7 @@ uint32 ClasslessMgr::RollAbility(Player* player, GrantSource source)
     if (st.abilities.count(chosen->firstSpellId))
     {
         LOG_WARN("module.classless", "Roll picked ability {} ({}) which guid {} already owns; skipped",
-                 chosen->firstSpellId, SpellName(chosen->firstSpellId), player->GetGUID().GetCounter());
+                 chosen->firstSpellId, SpellName(chosen->firstSpellId, player), player->GetGUID().GetCounter());
         return 0;
     }
 
@@ -8379,8 +8810,9 @@ uint32 ClasslessMgr::RollTalent(Player* player)
         {
             st.pity = 0;
             if (!_revealSuppress)
-                Msg(player, Acore::StringFormat("|cff00ff88Synergy roll!|r {} fits the abilities you already own.",
-                    SpellName(chosen->rankSpells[0])));
+                Msg(player, Acore::StringFormat(LocaleText(player, "|cff00ff88Synergy roll!|r {} fits the abilities you already own.",
+                    "|cff00ff88Сработала синергия!|r Талант «{}» подходит к вашей сборке."),
+                    SpellName(chosen->rankSpells[0], player)));
         }
 
         // the roll decides the RANK too, not just the talent, on its own
@@ -8410,12 +8842,13 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
     CharState& st = GetState(player);
     if (st.mode != Mode::Wildcard)
     {
-        if (err) *err = "Rerolls are a Wildcard mechanic.";
+        if (err) *err = LocaleText(player, "Rerolls are a Wildcard mechanic.", "Перебросы доступны только на случайном пути.");
         return false;
     }
     if (OnRun(player, ChallengeId::DealtHand))
     {
-        if (err) *err = "No rerolls on Dealt Hand. You play what you are dealt.";
+        if (err) *err = LocaleText(player, "No rerolls on Dealt Hand. You play what you are dealt.",
+            "В испытании «Сданная рука» перебросы запрещены. Играйте тем, что получили.");
         return false;
     }
 
@@ -8427,7 +8860,7 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
         auto itr = st.talents.find(entry);
         if (!t || itr == st.talents.end())
         {
-            if (err) *err = "You do not own that talent.";
+            if (err) *err = LocaleText(player, "You do not own that talent.", "У вас нет этого таланта.");
             return false;
         }
 
@@ -8439,9 +8872,10 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
         extraScrolls = std::min<uint32>(extraScrolls, cfg.wcTalentUpgradeMaxScrolls);
         if (extraScrolls && !canDeepen)
         {
-            if (err) *err = Acore::StringFormat(
+            if (err) *err = Acore::StringFormat(LocaleText(player,
                 "{} is already at rank {}. There is no higher rank to roll for.",
-                SpellName(t->rankSpells[0]), uint32(t->maxRank));
+                "Талант «{}» уже достиг {} ранга, поэтому повысить его нельзя."),
+                SpellName(t->rankSpells[0], player), uint32(t->maxRank));
             return false;
         }
 
@@ -8460,10 +8894,14 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
         if (scrolls && !player->HasItemCount(cfg.wcScrollItemId, int32(scrolls)))
         {
             if (err) *err = extraScrolls
-                ? Acore::StringFormat("That costs {} Reroll Scroll{}, and you have {}.", scrolls, scrolls == 1 ? "" : "s",
+                ? Acore::StringFormat(LocaleText(player, "That costs {} Reroll Scroll{}, and you have {}.",
+                    "Требуется {} свиток{} переброса, у вас есть {}."), scrolls,
+                      LocaleCount(player, scrolls, "", "s", "", "а", "ов"),
                       player->GetItemCount(cfg.wcScrollItemId))
-                : Acore::StringFormat("No reroll charges or Reroll Scrolls left. You earn {} charges each level, "
-                      "or you can buy a Reroll Scroll.", cfg.wcRerollsPerLevel);
+                : Acore::StringFormat(LocaleText(player,
+                      "No reroll charges or Reroll Scrolls left. You earn {} charges each level, or you can buy a Reroll Scroll.",
+                      "Не осталось зарядов и свитков переброса. Вы получаете {} зарядов за уровень или можете купить свиток."),
+                      cfg.wcRerollsPerLevel);
             return false;
         }
         if (spendCharge)
@@ -8486,8 +8924,9 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
                     PushAddon(player, Acore::StringFormat("RV|T|{}|{}|{}|{}|0|{}",
                         t->talentId, t->rankSpells[newRank - 1],
                         uint32(RankRarity(*t, newRank)), uint32(newRank), uint32(t->maxRank)));
-                Msg(player, Acore::StringFormat("{} rises to rank {} of {}.",
-                    SpellName(t->rankSpells[0]), uint32(newRank), uint32(t->maxRank)));
+                Msg(player, Acore::StringFormat(LocaleText(player, "{} rises to rank {} of {}.",
+                    "Ранг таланта «{}» повышен: {} из {}."),
+                    SpellName(t->rankSpells[0], player), uint32(newRank), uint32(t->maxRank)));
                 PruneCompanions(player);
                 SaveState(player);
                 return true;
@@ -8497,8 +8936,9 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
         // Traded away: it goes, it cannot come straight back, and the Wildcard
         // deals one new talent in its place.
         if (extraScrolls)
-            Msg(player, Acore::StringFormat("{} did not hold. The Wildcard deals again.",
-                SpellName(t->rankSpells[0])));
+            Msg(player, Acore::StringFormat(LocaleText(player, "{} did not hold. The Wildcard deals again.",
+                "Талант «{}» не удалось сохранить. Случайный путь выберет другой талант."),
+                SpellName(t->rankSpells[0], player)));
         RemoveTalentInternal(player, *t);
 
         st.bans.push_back({ entry, true, int32(cfg.wcSynergyBanRolls) });
@@ -8514,7 +8954,7 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
 
         if (!e || !st.abilities.count(e->firstSpellId))
         {
-            if (err) *err = "You do not own that ability.";
+            if (err) *err = LocaleText(player, "You do not own that ability.", "У вас нет этой способности.");
             return false;
         }
         if (st.abilities[e->firstSpellId].locked)
@@ -8525,23 +8965,27 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
             // because the player will report it as a lock that did not hold.
             LOG_WARN("module.classless",
                      "Reroll refused: guid {} asked to reroll LOCKED ability {} ({})",
-                     player->GetGUID().GetCounter(), e->firstSpellId, SpellName(e->firstSpellId));
-            if (err) *err = "That ability is locked. Unlock it first.";
+                     player->GetGUID().GetCounter(), e->firstSpellId, SpellName(e->firstSpellId, player));
+            if (err) *err = LocaleText(player, "That ability is locked. Unlock it first.",
+                                       "Эта способность закреплена. Сначала открепите её.");
             return false;
         }
         if (st.abilities[e->firstSpellId].source == GrantSource::Talent)
         {
-            if (err) *err = "That ability came with a talent. Reroll the talent instead.";
+            if (err) *err = LocaleText(player, "That ability came with a talent. Reroll the talent instead.",
+                "Эта способность получена вместе с талантом. Перебросьте сам талант.");
             return false;
         }
         if (st.abilities[e->firstSpellId].source == GrantSource::Companion)
         {
-            if (err) *err = "That came free with another ability. Reroll the one it came with instead.";
+            if (err) *err = LocaleText(player, "That came free with another ability. Reroll the one it came with instead.",
+                "Эта способность получена бесплатно вместе с другой. Перебросьте исходную способность.");
             return false;
         }
         if (st.abilities[e->firstSpellId].source == GrantSource::Heirloom)
         {
-            if (err) *err = "That is an heirloom carried through Rebirth. It is not rerolled.";
+            if (err) *err = LocaleText(player, "That is an heirloom carried through Rebirth. It is not rerolled.",
+                "Это унаследованная способность, сохранённая при Перерождении. Её нельзя перебросить.");
             return false;
         }
 
@@ -8553,8 +8997,10 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
                 player->DestroyItemCount(cfg.wcScrollItemId, 1, true);
             else
             {
-                if (err) *err = Acore::StringFormat("No reroll charges or Reroll Scrolls left. You earn {} charges each level, "
-                    "or you can buy a Reroll Scroll.", cfg.wcRerollsPerLevel);
+                if (err) *err = Acore::StringFormat(LocaleText(player,
+                    "No reroll charges or Reroll Scrolls left. You earn {} charges each level, or you can buy a Reroll Scroll.",
+                    "Не осталось зарядов и свитков переброса. Вы получаете {} зарядов за уровень или можете купить свиток."),
+                    cfg.wcRerollsPerLevel);
                 return false;
             }
         }
@@ -8583,12 +9029,13 @@ uint32 ClasslessMgr::RerollUnlockedAbilities(Player* player, std::string* err)
     CharState& st = GetState(player);
     if (st.mode != Mode::Wildcard)
     {
-        if (err) *err = "Rerolls are a Wildcard mechanic.";
+        if (err) *err = LocaleText(player, "Rerolls are a Wildcard mechanic.", "Перебросы доступны только на случайном пути.");
         return 0;
     }
     if (OnRun(player, ChallengeId::DealtHand))
     {
-        if (err) *err = "No rerolls on Dealt Hand. You play what you are dealt.";
+        if (err) *err = LocaleText(player, "No rerolls on Dealt Hand. You play what you are dealt.",
+            "В испытании «Сданная рука» перебросы запрещены. Играйте тем, что получили.");
         return 0;
     }
 
@@ -8643,7 +9090,7 @@ bool ClasslessMgr::SetLock(Player* player, uint32 firstSpellId, bool locked, std
 
     if (!e || !st.abilities.count(e->firstSpellId))
     {
-        if (err) *err = "You do not own that ability.";
+        if (err) *err = LocaleText(player, "You do not own that ability.", "У вас нет этой способности.");
         return false;
     }
 
@@ -8655,18 +9102,21 @@ bool ClasslessMgr::SetLock(Player* player, uint32 firstSpellId, bool locked, std
         source == GrantSource::Companion || source == GrantSource::Talent || source == GrantSource::Heirloom)
     {
         if (err) *err = source == GrantSource::Companion
-            ? "That came free with another ability. It cannot be rerolled, so there is nothing to lock."
+            ? LocaleText(player, "That came free with another ability. It cannot be rerolled, so there is nothing to lock.",
+                         "Эта способность получена вместе с другой и не перебрасывается, поэтому её нельзя закрепить.")
             : source == GrantSource::Talent
-            ? "That came with a talent. It cannot be rerolled, so there is nothing to lock."
-            : "That is an heirloom. It is never rerolled, so there is nothing to lock.";
+            ? LocaleText(player, "That came with a talent. It cannot be rerolled, so there is nothing to lock.",
+                         "Эта способность получена вместе с талантом и не перебрасывается, поэтому её нельзя закрепить.")
+            : LocaleText(player, "That is an heirloom. It is never rerolled, so there is nothing to lock.",
+                         "Это унаследованная способность, её нельзя перебросить или закрепить.");
         return false;
     }
 
     if (locked && player->GetLevel() >= cfg.wcFreeRerollLevel)
     {
-        if (err) *err = Acore::StringFormat(
-            "Padlocks only matter while the starting hand is open (below level {}). "
-            "From there you reroll one ability at a time, and only the one you pick.",
+        if (err) *err = Acore::StringFormat(LocaleText(player,
+            "Padlocks only matter while the starting hand is open (below level {}). From there you reroll one ability at a time, and only the one you pick.",
+            "Закрепление нужно только пока доступна стартовая раздача — до {} уровня. После неё способности перебрасываются по одной, на ваш выбор."),
             uint32(cfg.wcFreeRerollLevel));
         return false;
     }
@@ -8683,8 +9133,10 @@ bool ClasslessMgr::SetLock(Player* player, uint32 firstSpellId, bool locked, std
         owned.locked ? 1 : 0, player->GetGUID().GetCounter(), e->firstSpellId);
 
     if (changed)
-        Msg(player, Acore::StringFormat("{} is now {}.", SpellName(e->firstSpellId),
-            owned.locked ? "|cffffff00locked|r" : "unlocked"));
+        Msg(player, Acore::StringFormat(LocaleText(player, "{} is now {}.", "«{}» теперь {}."),
+            SpellName(e->firstSpellId, player), owned.locked
+                ? LocaleText(player, "|cffffff00locked|r", "|cffffff00закреплена|r")
+                : LocaleText(player, "unlocked", "откреплена")));
     return true;
 }
 

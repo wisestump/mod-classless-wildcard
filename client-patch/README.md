@@ -3,6 +3,10 @@
 Required for every player on a Classless Wildcard realm. The
 [module README](../README.md) explains why.
 
+The `locales` folder is part of the player package. Keep it beside `lib` and
+`install.py`; the installer reads these catalogs when preparing a ruRU client.
+The updater also refreshes this folder with the rest of `client-patch`.
+
 > ## Close World of Warcraft before you run this
 >
 > The installer deletes your client cache for you, every time it runs, and it

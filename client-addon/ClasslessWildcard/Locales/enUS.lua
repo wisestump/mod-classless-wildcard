@@ -1,0 +1,32 @@
+ClasslessWildcardLocaleData = {
+    rarity = { "Common", "Uncommon", "Rare", "Epic", "Legendary" },
+    classes = {
+        [1] = "Warrior", [2] = "Paladin", [3] = "Hunter", [4] = "Rogue",
+        [5] = "Priest", [6] = "Death Knight", [7] = "Shaman", [8] = "Mage",
+        [9] = "Warlock", [11] = "Druid", [12] = "Hero",
+    },
+    stats = { "Strength", "Agility", "Stamina", "Intellect", "Spirit" },
+    sorts = { "Level 1-80", "Level 80-1", "Name A-Z", "Name Z-A", "By type" },
+    talentSorts = { "Tier 1-11", "Tier 11-1", "Name A-Z", "Name Z-A", "By type" },
+    types = { "All", "Melee", "Ranged", "Spells", "Heals", "Utility", "Passive" },
+    scopes = { "My level", "Any level" },
+    text = {
+        ["%d life out of %d remains"] = "%d of %d life left",
+        ["%d lives (few) out of %d remain"] = "%d of %d lives left",
+        ["%d lives out of %d remain"] = "%d of %d lives left",
+        ["%d lives (few)"] = "%d lives",
+        ["%s (+%d levels)"] = "%s +%d levels",
+        ["%d minutes (few)"] = "%d minutes",
+        ["|cffff8800%d nemeses (few)|r"] = "|cffff8800%d nemeses|r",
+        ["Starts with |cffffffff%d lives (few)|r"] = "Starts with |cffffffff%d lives|r",
+        ["|cffffffff%d lives (few)|r on this challenge. A death costs one. Deaths in battlegrounds, arenas and duels cost nothing. Run out and the run ends: the rule lifts, and you keep your level, gear and build."] = "|cffffffff%d lives|r on this challenge. A death costs one. Deaths in battlegrounds, arenas and duels cost nothing. Run out and the run ends: the rule lifts, and you keep your level, gear and build.",
+        ["|cffffffff%d lives (few)|r on this challenge%s. A death costs one. Deaths in battlegrounds, arenas and duels cost nothing. Run out and the run ends: the rule lifts, and you keep your level, gear and build."] = "|cffffffff%d lives|r on this challenge%s. A death costs one. Deaths in battlegrounds, arenas and duels cost nothing. Run out and the run ends: the rule lifts, and you keep your level, gear and build.",
+    },
+    ui = {
+        title = "Hero Advancement", stats = "Stats", respec = "Respec",
+        rebirth = "Rebirth", classless = "Classless", wildcard = "Wildcard",
+        abilities = "Abilities", talents = "Talents", myBuild = "My Build",
+        archetypes = "Archetypes", myBuilds = "My Builds", help = "Help",
+        settings = "Settings", challenges = "Challenge runs",
+    },
+}

@@ -26,6 +26,7 @@
 
 #include "ClasslessMgr.h"
 #include "Chat.h"
+#include "ClasslessLocale.h"
 #include "Creature.h"
 #include "CellImpl.h"
 #include "CreatureAI.h"
@@ -481,7 +482,8 @@ public:
             return true;
         if (item->GetTemplate()->Quality <= ITEM_QUALITY_NORMAL)
             return true;
-        Say(player, "|cffff4444Ironman|r: only white gear on this run.");
+        Say(player, LocaleText(player, "|cffff4444Ironman|r: only white gear on this run.",
+            "|cffff4444Железная воля|r: в этом испытании разрешено только обычное снаряжение."));
         return false;
     }
 
@@ -510,10 +512,12 @@ public:
             uint32 const before = st->runData;
             st->runData += RULE_TICK_MS / IN_MILLISECONDS;
             if (before < limit - HOURGLASS_WARNING && st->runData >= limit - HOURGLASS_WARNING)
-                Say(player, "|cffff8800Hourglass|r: five minutes left on this level.");
+                Say(player, LocaleText(player, "|cffff8800Hourglass|r: five minutes left on this level.",
+                    "|cffff8800Песочные часы|r: на этом уровне осталось пять минут."));
             if (st->runData >= limit)
             {
-                Say(player, "|cffff4444Hourglass|r: the sand ran out.");
+                Say(player, LocaleText(player, "|cffff4444Hourglass|r: the sand ran out.",
+                    "|cffff4444Песочные часы|r: время истекло."));
                 sClasslessMgr->LoseLife(player, nullptr);   // resets the clock
             }
         }
@@ -573,7 +577,9 @@ public:
                               + uint64(sClasslessMgr->cfg.nemesisBrittleSeconds) * IN_MILLISECONDS;
         fight->enraged = false;
         if (sClasslessMgr->LearnNemesis(hero, copy, NEMESIS_LEARNED_WEAKNESS))
-            ChatHandler(hero->GetSession()).SendNotification("Weakness found: brittle. A stun breaks it open.");
+            ChatHandler(hero->GetSession()).SendNotification(LocaleText(hero,
+                "Weakness found: brittle. A stun breaks it open.",
+                "Обнаружена слабость: хрупкость. Оглушение пробьёт защиту."));
     }
 
     // A creature's level, health and size, as each viewer should see them.
@@ -834,8 +840,9 @@ private:
             std::string list;
             for (uint8 s : mark->strengths)
                 if (s != NS_NONE)
-                    list += (list.empty() ? "" : ", ") + std::string(ClasslessMgr::NemesisStrengthName(s));
-            Say(hero, Acore::StringFormat("|cffff8800{}|r: {}.", copy->GetName(), list));
+                    list += (list.empty() ? "" : ", ") + ClasslessMgr::NemesisStrengthName(s, hero);
+            Say(hero, Acore::StringFormat(LocaleText(hero, "|cffff8800{}|r: {}.", "|cffff8800{}|r: {}."),
+                sClasslessMgr->LocalizedCreatureName(hero, copy->GetEntry()), list));
         }
         if (mark->Has(NS_BLOODLUST))
             copy->SendPlaySpellVisual(NEMESIS_BLOODLUST_KIT);
@@ -854,7 +861,8 @@ private:
                 if (called->AI())
                     called->AI()->AttackStart(hero);
             }
-            sClasslessMgr->NemesisSay(hero, copy, "calls its pack to its side!", true);
+                sClasslessMgr->NemesisSay(hero, copy, LocaleText(hero,
+                    "calls its pack to its side!", "зовёт свою стаю!"), true);
         }
     }
 
@@ -869,7 +877,8 @@ private:
         if (!fight->enraged)
         {
             fight->enraged = true;
-            sClasslessMgr->NemesisSay(hero, copy, "becomes enraged!", true);
+                sClasslessMgr->NemesisSay(hero, copy, LocaleText(hero,
+                    "becomes enraged!", "приходит в ярость!"), true);
         }
         damage += damage * sClasslessMgr->cfg.nemesisUnyieldingPct / 100;
     }
@@ -890,8 +899,11 @@ private:
         {
             damage += damage * cfg.nemesisWeakSchoolPct / 100;
             if (sClasslessMgr->LearnNemesis(hero, copy, NEMESIS_LEARNED_WEAKNESS))
-                ChatHandler(hero->GetSession()).SendNotification(Acore::StringFormat("Weakness found: {}.",
-                    ClasslessMgr::NemesisWeaknessName(mark.weakness)));
+            {
+                std::string const weakness = ClasslessMgr::NemesisWeaknessName(mark.weakness, hero);
+                ChatHandler(hero->GetSession()).SendNotification(Acore::StringFormat(
+                    LocaleText(hero, "Weakness found: {}.", "Обнаружена слабость: {}."), weakness));
+            }
         }
         if (mark.weakness == NW_BRITTLE && uint64(GameTime::GetGameTimeMS().count()) < fight->brittleUntil)
             damage += damage * cfg.nemesisBrittlePct / 100;
@@ -904,9 +916,12 @@ private:
             {
                 fight->fled = true;
                 copy->GetMotionMaster()->MoveFleeing(hero, cfg.nemesisCowardlyFleeSeconds * IN_MILLISECONDS);
-                sClasslessMgr->NemesisSay(hero, copy, "turns to flee!", true);
+                sClasslessMgr->NemesisSay(hero, copy, LocaleText(hero,
+                    "turns to flee!", "обращается в бегство!"), true);
                 if (sClasslessMgr->LearnNemesis(hero, copy, NEMESIS_LEARNED_WEAKNESS))
-                    ChatHandler(hero->GetSession()).SendNotification("Weakness found: cowardly. Run it down.");
+                    ChatHandler(hero->GetSession()).SendNotification(LocaleText(hero,
+                        "Weakness found: cowardly. Run it down.",
+                        "Обнаружена слабость: трусость. Не дайте ему сбежать."));
             }
         }
     }
@@ -1030,7 +1045,7 @@ class spell_cw_swear_vendetta : public SpellScript
         if (!player || !sClasslessMgr->CanSwearVendetta(player, target, &err))
         {
             if (player && !err.empty())
-                ChatHandler(player->GetSession()).SendNotification(err);
+                ChatHandler(player->GetSession()).SendNotification(LocaleError(player, err));
             return SPELL_FAILED_DONT_REPORT;
         }
         return SPELL_CAST_OK;

@@ -37,7 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from lib import (blp, charcreate, clientfs, dbc, dkfaces, elemental, exepatch, framexml,  # noqa: E402
-                 forged, gluestrings, armpatch, macapp, mpq, outfit)
+                 forged, gluestrings, locales as locale_data, armpatch, macapp, mpq, outfit)
 
 MANIFEST_NAME = "ClasslessWildcard-install.json"
 ADDON_NAME = "ClasslessWildcard"
@@ -402,6 +402,21 @@ def build_data_patch(files, name, report, theme=False, keep_totems=False):
     return payload
 
 
+def build_locale_class_table(locale_payload, name, locale):
+    """Localize class names on the already-patched locale DBC.
+
+    Re-reading ChrClasses.dbc from the archive here would discard earlier
+    edits in build_data_patch, including clearing the relic-slot flag used by
+    the Hero's ranged weapon slot.
+    """
+    source = locale_payload.get(CHRCLASSES)
+    if source is None:
+        raise dbc.DbcError("patched locale payload has no ChrClasses.dbc")
+    localized, _renamed = dbc.rename_all_classes(
+        source, name, "Герой" if locale.lower() == "ruru" else "")
+    return localized
+
+
 # SpellFamilyName 14, which the generators claim for everything this module
 # forges. Its percentage costs are lowered along with the flat ones because the
 # server sends a correction for every spell in this family; no stock family is,
@@ -543,7 +558,7 @@ def build_locale_patch(files, name, report, locale, theme=False, icon=False):
     if theme:
         raw, source = files.find(GLUESTRINGS)
         text = raw.decode("utf-8", "surrogateescape")
-        new_text, replaced = gluestrings.rewrite(text, name)
+        new_text, replaced = gluestrings.rewrite(text, name, locale)
         if not replaced:
             raise Abort(
                 "Found GlueStrings.lua for %s but none of the class description "
@@ -1027,14 +1042,70 @@ def do_install(args, wow_dir):
     # The base archive is still written so a locale folder without a locale
     # patch of its own is covered, but the locale copy is the one that wins.
     for locale in locales:
+        locale_report = []
         with clientfs.ClientFiles(data_dir, locale,
                                   exclude=own_archives(locale)) as files:
             payload = build_locale_patch(files, args.name, report, locale,
                                          theme=args.glue, icon=args.hero_icon)
+            locale_dbc_payload = build_data_patch(
+                files, args.name, locale_report, theme=args.glue,
+                keep_totems=args.exe)
+            if args.elemental:
+                manifest_file = elemental.manifest_path()
+                if os.path.exists(manifest_file):
+                    try:
+                        manifest = elemental.load_manifest(manifest_file)
+                        if locale.lower() == "ruru":
+                            locale_data.apply_ruRU(
+                                manifest, locale_data.load_catalog(), "variants",
+                                files=files)
+                        else:
+                            locale_data.clear_ruRU(manifest, "variants")
+                        elemental.apply(files, locale_dbc_payload, manifest, locale_report)
+                    except (elemental.ElementalError, dbc.DbcError, FileNotFoundError,
+                            ValueError) as error:
+                        raise Abort("Could not prepare elemental DBCs for %s: %s" % (locale, error))
+            if args.forged:
+                manifest_file = forged.manifest_path()
+                if os.path.exists(manifest_file):
+                    try:
+                        manifest = forged.load_manifest(manifest_file)
+                        if locale.lower() == "ruru":
+                            catalog = locale_data.load_catalog()
+                            locale_data.apply_ruRU(manifest, catalog, "spells")
+                            locale_data.apply_ruRU(manifest, catalog, "titles")
+                            line_name = catalog.get("skill_lines", {}).get(
+                                str(manifest.get("skill_line", {}).get("id", "")))
+                            if line_name:
+                                manifest["skill_line"]["ruRU"] = line_name
+                        else:
+                            locale_data.clear_ruRU(manifest, "spells")
+                            locale_data.clear_ruRU(manifest, "titles")
+                            manifest.get("skill_line", {}).pop("ruRU", None)
+                        forged.apply(files, locale_dbc_payload, manifest, locale_report)
+                        hero_talents = forged.modifier_spells(manifest)
+                    except (forged.ForgedError, dbc.DbcError, FileNotFoundError) as error:
+                        raise Abort("Could not prepare forged DBCs for %s: %s" % (locale, error))
+                else:
+                    hero_talents = ()
+            else:
+                hero_talents = ()
+            apply_client_floors(files, locale_dbc_payload, locale_report, hero_talents)
+            try:
+                class_dbc = build_locale_class_table(locale_dbc_payload, args.name, locale)
+            except dbc.DbcError as error:
+                raise Abort("Could not prepare ChrClasses.dbc for %s: %s" % (locale, error))
         # the painted faces stay in the base archive only: nothing outranks
         # them there, and a second copy would only double the download
         payload.update({k: v for k, v in dbc_payload.items()
                         if not dkfaces.is_generated_name(k)})
+        # ChrClasses is a language table. Build its locale copy from that
+        # locale's own archive chain, while keeping Hero in the other locale
+        # columns and writing the Russian class name only to ruRU.
+        payload.update({k: v for k, v in locale_dbc_payload.items()
+                        if not dkfaces.is_generated_name(k)})
+        payload[CHRCLASSES] = class_dbc
+        report.extend(locale_report)
         name = "patch-%s-%s.MPQ" % (locale, suffix)
         target = os.path.join(data_dir, locale, name)
         if not args.dry_run:

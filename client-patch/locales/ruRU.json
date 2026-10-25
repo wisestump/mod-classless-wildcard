@@ -1,0 +1,504 @@
+{
+  "locale": "ruRU",
+  "glossary": {
+    "Hero Advancement": "Развитие героя",
+    "Classless": "Свободный путь",
+    "Wildcard": "Случайный путь",
+    "Ability Essence": "Эссенция способностей",
+    "Talent Essence": "Эссенция талантов",
+    "Rebirth": "Перерождение",
+    "reroll": "переброс",
+    "heirloom": "фамильное снаряжение",
+    "archetype": "архетип",
+    "challenge": "испытание",
+    "nemesis": "немезида",
+    "common": "обычный",
+    "uncommon": "необычный",
+    "rare": "редкий",
+    "epic": "эпический",
+    "legendary": "легендарный"
+  },
+  "command_help": {
+    "classless status": "Синтаксис: .classless status\nПоказывает выбранный путь, способности и таланты, эссенции, заряды переброса и время их восстановления.",
+    "classless mode": "Синтаксис: .classless mode classless|wildcard\nВыбирает путь. Доступно только до закрепления пути.",
+    "classless learn": "Синтаксис: .classless learn $spellId\nПокупает способность за эссенцию способностей. Только для свободного пути.",
+    "classless unlearn": "Синтаксис: .classless unlearn $spellId\nЗабывает способность и возвращает эссенцию способностей. Только для свободного пути.",
+    "classless talent": "Синтаксис: .classless talent $talentId\nПокупает следующий ранг таланта за эссенцию талантов. Только для свободного пути.",
+    "classless respec": "Синтаксис: .classless respec\nЗабывает все способности и таланты и возвращает всю эссенцию. Бесплатно. Только для свободного пути.",
+    "classless stats": "Синтаксис: .classless stats\nПоказывает распределение основных характеристик и нераспределённые очки.",
+    "classless stat": "Синтаксис: .classless stat str|agi|sta|int|spi $points\nРаспределяет очки по основной характеристике. Перераспределение бесплатно.",
+    "classless bar": "Синтаксис: .classless bar mana|rage|energy|default\nВыбирает ресурс для основной шкалы.",
+    "classless archetypes": "Синтаксис: .classless archetypes\nПоказывает список архетипов и их идентификаторы.",
+    "classless archetype": "Синтаксис: .classless archetype $id\nВыбирает архетип вместо вашей сборки. Значение 0 прекращает следование. Только для свободного пути.",
+    "classless rebirth": "Синтаксис: .classless rebirth [$abilityId ...] confirm\nНа максимальном уровне возвращает вас на 1-й уровень с постоянным рангом Перерождения и указанными унаследованными способностями. Без confirm показывает результат.",
+    "classless challenges": "Синтаксис: .classless challenges\nПоказывает испытания, их идентификаторы, количество жизней и награды.",
+    "classless run": "Синтаксис: .classless run $id\nНачинает испытание для нового персонажа до выбора пути. Идентификаторы указаны в .classless challenges.",
+    "classless nemesis": "Синтаксис: .classless nemesis\nПоказывает сведения о Немезиде и доступные действия текущего испытания.",
+    "wildcard status": "Синтаксис: .wildcard status\nПоказывает выбранный путь, способности и таланты, заряды переброса, шанс синергии и время восстановления переброса.",
+    "wildcard reroll": "Синтаксис: .wildcard reroll $spellId\nПеребрасывает изученную способность. Ниже уровня бесплатного переброса это бесплатно, затем расходуется заряд или свиток переброса.",
+    "wildcard rerolltalent": "Синтаксис: .wildcard rerolltalent $talentId [$scrolls]\nПеребрасывает изученный талант. Каждый поставленный свиток повышает шанс сохранить талант и увеличить его ранг.",
+    "wildcard lock": "Синтаксис: .wildcard lock $spellId\nЗакрепляет или открепляет способность в стартовой руке."
+  },
+  "skill_lines": {
+    "990": "Герой"
+  },
+  "items": {
+    "990101": {
+      "name": "Свиток переброса",
+      "description": "Позволяет перебросить способность или талант в режиме «Случайный путь»."
+    }
+  },
+  "titles": {
+    "180": {
+      "male": "%s Перерождённый",
+      "female": "%s Перерождённая"
+    },
+    "181": {
+      "male": "%s Дважды перерождённый",
+      "female": "%s Дважды перерождённая"
+    },
+    "182": {
+      "male": "%s Трижды перерождённый",
+      "female": "%s Трижды перерождённая"
+    },
+    "183": {
+      "male": "%s Многократно перерождённый",
+      "female": "%s Многократно перерождённая"
+    },
+    "184": {
+      "male": "%s Вечный",
+      "female": "%s Вечная"
+    },
+    "185": {
+      "male": "%s Непоколебимый",
+      "female": "%s Непоколебимая"
+    },
+    "186": {
+      "male": "%s Немезида",
+      "female": "%s Немезида"
+    },
+    "187": {
+      "male": "%s, Гроза великанов",
+      "female": "%s, Гроза великанов"
+    },
+    "188": {
+      "male": "%s Неумирающий",
+      "female": "%s Неумирающая"
+    },
+    "189": {
+      "male": "%s Преследуемый",
+      "female": "%s Преследуемая"
+    },
+    "190": {
+      "male": "%s Несокрушимый",
+      "female": "%s Несокрушимая"
+    },
+    "191": {
+      "male": "%s Сокрушитель Легиона",
+      "female": "%s Сокрушительница Легиона"
+    },
+    "192": {
+      "male": "%s Стремительный",
+      "female": "%s Стремительная"
+    },
+    "193": {
+      "male": "%s Израненный",
+      "female": "%s Израненная"
+    },
+    "194": {
+      "male": "%s Кровожадный",
+      "female": "%s Кровожадная"
+    },
+    "195": {
+      "male": "%s Берсерк",
+      "female": "%s Берсерк"
+    },
+    "196": {
+      "male": "%s Закалённый",
+      "female": "%s Закалённая"
+    },
+    "197": {
+      "male": "%s, Охотник на крупную дичь",
+      "female": "%s, Охотница на крупную дичь"
+    },
+    "198": {
+      "male": "%s Избранный судьбой",
+      "female": "%s Избранная судьбой"
+    }
+  },
+  "creatures": {
+    "990099": {
+      "name": "Неумолимый охотник",
+      "subname": "Преследователь"
+    },
+    "990100": {
+      "name": "Развитие героя",
+      "subname": "Наставник героя"
+    },
+    "990110": {
+      "name": "Якорь бастиона",
+      "subname": ""
+    },
+    "990111": {
+      "name": "Восстановленный часовой",
+      "subname": ""
+    },
+    "990112": {
+      "name": "Каирн",
+      "subname": ""
+    },
+    "990113": {
+      "name": "Путевой камень",
+      "subname": ""
+    },
+    "990114": {
+      "name": "Сигнальный костёр",
+      "subname": ""
+    },
+    "990115": {
+      "name": "Точка сбора",
+      "subname": ""
+    },
+    "990117": {
+      "name": "Ядовитый жук",
+      "subname": ""
+    },
+    "990118": {
+      "name": "Восстановленный часовой",
+      "subname": ""
+    },
+    "990119": {
+      "name": "Восстановленный часовой",
+      "subname": ""
+    },
+    "991000": {
+      "name": "Развитие героя",
+      "subname": "Оружие: уровни 1–20"
+    },
+    "991001": {
+      "name": "Развитие героя",
+      "subname": "Оружие: уровни 21–40"
+    },
+    "991002": {
+      "name": "Развитие героя",
+      "subname": "Оружие: уровни 41–60"
+    },
+    "991003": {
+      "name": "Развитие героя",
+      "subname": "Оружие: уровни 61–80"
+    },
+    "991004": {
+      "name": "Развитие героя",
+      "subname": "Оружие: все уровни"
+    },
+    "991010": {
+      "name": "Развитие героя",
+      "subname": "Броня: уровни 1–20"
+    },
+    "991011": {
+      "name": "Развитие героя",
+      "subname": "Броня: уровни 21–40"
+    },
+    "991012": {
+      "name": "Развитие героя",
+      "subname": "Броня: уровни 41–60"
+    },
+    "991013": {
+      "name": "Развитие героя",
+      "subname": "Броня: уровни 61–80"
+    },
+    "991014": {
+      "name": "Развитие героя",
+      "subname": "Броня: все уровни"
+    },
+    "991020": {
+      "name": "Развитие героя",
+      "subname": "Украшения и предметы для левой руки: уровни 1–20"
+    },
+    "991021": {
+      "name": "Развитие героя",
+      "subname": "Украшения и предметы для левой руки: уровни 21–40"
+    },
+    "991022": {
+      "name": "Развитие героя",
+      "subname": "Украшения и предметы для левой руки: уровни 41–60"
+    },
+    "991023": {
+      "name": "Развитие героя",
+      "subname": "Украшения и предметы для левой руки: уровни 61–80"
+    },
+    "991024": {
+      "name": "Развитие героя",
+      "subname": "Украшения и предметы для левой руки: все уровни"
+    },
+    "991034": {
+      "name": "Развитие героя",
+      "subname": "Наследуемая экипировка"
+    }
+  },
+  "item_templates": {
+    "tier_prefixes": {
+      "Apprentice's": "ученический",
+      "Journeyman's": "подмастерья",
+      "Adept's": "адепта",
+      "Veteran's": "ветерана",
+      "Champion's": "чемпиона",
+      "Master's": "мастера",
+      "Grand Master's": "великого мастера",
+      "Exemplar's": "образца",
+      "Ascendant": "вознесённый"
+    },
+    "names": {
+      "Arcane Handcannon": "Тайный ручной громобой",
+      "Bruteforce Longbow": "Длинный лук грубой силы",
+      "Ironbark Warstaff": "Боевой посох железной коры",
+      "Arcane Pike": "Тайная пика",
+      "Windrunner Cleaver": "Тесак ветробега",
+      "Kingslayer Dagger": "Кинжал цареубийцы",
+      "Hammer of Quiet Malice": "Молот тихой злобы",
+      "Spellbinder Blade": "Клинок заклинателя",
+      "Sparkfist Talon": "Коготь искристого кулака",
+      "Wand of Brutal Focus": "Жезл жестокой сосредоточенности",
+      "Runeplate Vestment": "Рунный латный доспех",
+      "Bulwark Chainmail": "Кольчуга оплота",
+      "Zealot Hide Jerkin": "Кожаный жакет фанатика",
+      "Ironweave Battlerobe": "Боевая мантия железного плетения",
+      "Legplates of the Windwalker": "Набедренники ветрохода",
+      "Chainweave Leggings": "Кольчужные поножи",
+      "Warcloak of the Untethered": "Боевой плащ освобождённого",
+      "Barrier of Raw Intellect": "Преграда чистого разума",
+      "Chain of the Untethered": "Цепь освобождённого",
+      "Loop of Contradiction": "Кольцо противоречия",
+      "Focus of the Untethered": "Фокус освобождённого",
+      "Grimoire of the Berserker": "Гримуар берсерка",
+      "Truesight Greathelm": "Шлем истинного зрения",
+      "Gloves of the Sure Strike": "Перчатки верного удара",
+      "Girdle of Quickened Thought": "Пояс ускоренной мысли",
+      "Boots of the Hasty Brute": "Сапоги проворного громилы",
+      "Spellbinder's Boomstick": "Громовая палка заклинателя",
+      "Longbow of the Mendicant": "Длинный лук целителя",
+      "Warlord's Heavy Javelin": "Тяжёлый дротик полководца",
+      "Bulwark Chainmail of the Hero": "Кольчуга оплота героя",
+      "Bulwark Chain Helm of the Hero": "Кольчужный шлем оплота героя",
+      "Runeplate of the Battle Mage": "Рунные латы боевого мага",
+      "Runeplate Gauntlets of the Battle Mage": "Рунные рукавицы боевого мага",
+      "Bloodfervor Hide Jerkin": "Кожаный жакет кровавого пыла",
+      "Windrunner's Claymore": "Клеймор ветробега",
+      "Aegis of Quiet Prayer": "Эгида тихой молитвы",
+      "Bastion Battlerobe of the Hero": "Боевая мантия бастиона героя",
+      "Pendant of Split Purpose": "Подвеска раздвоенной цели",
+      "Band of the Blurred Line": "Кольцо размытой грани",
+      "Codex of the Warpriest": "Кодекс боевого жреца",
+      "Kingslayer's Letter Opener": "Вскрыватель писем цареубийцы",
+      "Boneshatter Handcannon": "Ручной громобой костолома",
+      "Enchanted Bola": "Зачарованная бола",
+      "Silkstep Treads": "Шёлковые сапоги лёгкого шага",
+      "Everkeen Warblade": "Вечноострый боевой клинок",
+      "Everkeen Fang": "Вечноострый клык",
+      "Everkeen Spellblade": "Вечноострый клинок чар",
+      "Everkeen Reaver": "Вечноострый жнец",
+      "Everkeen Battlestaff": "Вечноострый боевой посох",
+      "Everkeen Warstaff": "Вечноострый военный посох",
+      "Everkeen Longbow": "Вечноострый длинный лук",
+      "Everkeen Handcannon": "Вечноострый ручной громобой",
+      "Timeless Plate Chestguard": "Неувядающий латный нагрудник",
+      "Timeless Plate Pauldrons": "Неувядающие латные наплечники",
+      "Timeless Mail Hauberk": "Неувядающий кольчужный хауберк",
+      "Timeless Mail Spaulders": "Неувядающие кольчужные наплечья",
+      "Timeless Leather Cuirass": "Неувядающая кожаная кираса",
+      "Timeless Leather Mantle": "Неувядающее кожаное оплечье",
+      "Timeless Cloth Robe": "Неувядающая матерчатая роба",
+      "Timeless Cloth Mantle": "Неувядающее матерчатое оплечье",
+      "Timeless Mail Vest of Insight": "Неувядающий кольчужный жилет прозрения",
+      "Timeless Leather Vest of Ruin": "Неувядающий кожаный жилет погибели",
+      "Timeless Greatcloak": "Неувядающий большой плащ",
+      "Timeless Warcloak": "Неувядающий боевой плащ",
+      "Everflowing Spell Focus": "Неиссякаемый фокус чар",
+      "Everquick Chronometer": "Неиссякающий хронометр",
+      "Everseeing Eye": "Неусыпное око"
+    },
+    "descriptions": {
+      "A firearm that answers to intellect.": "Огнестрельное оружие, сила которого зависит от интеллекта.",
+      "Drawn by main strength, not finesse.": "Тетиву натягивают силой, а не ловкостью.",
+      "A staff for hitting things.": "Посох, которым удобно бить.",
+      "A polearm that reaches further than its blade.": "Древковое оружие с клинком, достающим дальше обычного.",
+      "A greataxe balanced for the fleet of foot.": "Тяжёлый топор, уравновешенный для быстрых бойцов.",
+      "A dagger with a claymore's attitude.": "Кинжал с замашками двуручного меча.",
+      "A mace balanced for someone light on their feet.": "Булава, уравновешенная для проворного бойца.",
+      "A sword that carries spell power instead of muscle.": "Меч, в котором магическая сила важнее физической.",
+      "For those who cast with their knuckles.": "Для тех, кто творит чары костяшками пальцев.",
+      "A wand that lends attack power.": "Жезл, усиливающий силу атаки.",
+      "Full plate that channels spell power.": "Полный латный доспех, проводящий силу заклинаний.",
+      "Mail cut for raw strength.": "Кольчуга, созданная для грубой силы.",
+      "Spell power leather, mobility without the silk.": "Кожаный доспех для заклинателя: подвижность без шёлка.",
+      "A robe carrying attack power. Nobody else would dare.": "Мантия, усиливающая силу атаки. Другие не осмелились бы её надеть.",
+      "Plate legs light enough to sprint in. Allegedly.": "Латы, в которых якобы можно бегать.",
+      "Mail that favors spirit over brawn.": "Кольчуга, отдающая предпочтение духу, а не силе.",
+      "A cloak for the ones who close the distance.": "Плащ для тех, кто быстро сокращает дистанцию.",
+      "A shield for casters who refuse to stand at the back.": "Щит для заклинателей, которые не желают отсиживаться позади.",
+      "Strength and intellect on one chain.": "Сила и интеллект на одной цепи.",
+      "Agility and spell power have no quarrel here.": "Ловкость и сила заклинаний прекрасно уживаются.",
+      "A focus that hums with borrowed power.": "Фокус, гудящий от заимствованной силы.",
+      "An off-hand book carrying attack power.": "Книга для левой руки, усиливающая силу атаки.",
+      "A plate helm that makes spells land.": "Латный шлем, помогающий заклинаниям попадать в цель.",
+      "Silk gloves for someone who swings first and reads later.": "Шёлковые перчатки для тех, кто сперва бьёт, а потом читает.",
+      "Leather cut for a caster in a hurry.": "Кожаный доспех для заклинателя, который всегда спешит.",
+      "Mail boots that hurry a heavy swing.": "Кольчужные сапоги ускоряют тяжёлый удар.",
+      "A firearm tuned to arcane resonance. Casters welcome.": "Огнестрельное оружие, настроенное на тайную магию. Заклинателям сюда.",
+      "Strung for those who heal between volleys.": "Натянут для тех, кто успевает лечить между залпами.",
+      "A soldier's answer to problems at range.": "Ответ солдата на угрозы издалека.",
+      "Mail forged for those who tank without a shield wall pedigree.": "Кольчуга для тех, кто принимает удары без щита и строевой выучки.",
+      "A helm for unconventional defenders.": "Шлем для защитников, которые не следуют обычаям.",
+      "Plate etched with channeling runes. Heavy armor, heavier spells.": "Латы с рунами проводимости. Тяжёлая броня и ещё более тяжёлые заклинания.",
+      "Gauntlets that do not muffle spellcraft.": "Рукавицы, не мешающие творить чары.",
+      "Supple leather for holy warriors who strike from the shadows.": "Мягкая кожа для воинов Света, нападающих из тени.",
+      "A greatsword balanced for the fleet of foot.": "Двуручный меч, уравновешенный для быстрых бойцов.",
+      "A shield that hums with restorative energy.": "Щит, наполненный целительной энергией.",
+      "Woven for casters who insist on being hit.": "Соткано для заклинателей, которые сами лезут под удар.",
+      "Strength and intellect on one chain. Pick a side, or do not.": "Сила и интеллект на одной цепи. Выбирай что-то одно — или оставь оба.",
+      "For the ones who stab and then heal the wound.": "Для тех, кто сперва наносит удар, а затем лечит рану.",
+      "Strength and spell power, welded into one ring.": "Сила и сила заклинаний сплавлены в одном кольце.",
+      "Agility and intellect have no quarrel here.": "Ловкость и интеллект прекрасно уживаются.",
+      "A tome braced to be swung if the reading goes badly.": "Фолиант, которым можно огреть противника, если чтение не поможет.",
+      "An off-hand book carrying attack power. It has notes in the margins.": "Книга для левой руки, усиливающая силу атаки. Поля исписаны заметками.",
+      "A staff for hitting things. The wood is only incidental.": "Посох для драки. Дерево здесь — всего лишь материал.",
+      "Small enough to hide, heavy enough to matter.": "Достаточно мал, чтобы спрятать, и достаточно тяжёл, чтобы пригодиться.",
+      "Heavy enough to club with once the shot is spent.": "Когда боеприпасы кончатся, им можно огреть противника.",
+      "A wand that lends attack power. It is not sure why either.": "Жезл усиливает силу атаки. Он и сам не знает зачем.",
+      "Thrown, then the runes go off. The second part is the clever bit.": "Брось его — и руны сработают. Самое хитрое начинается потом.",
+      "Cloth boots with a soldier's tread.": "Тканевые сапоги с солдатской поступью.",
+      "Strength, stamina and critical strike. It never outgrows you.": "Сила, выносливость и критический удар. Они всегда будут тебе впору.",
+      "A dagger that sharpens itself as you rise.": "Кинжал, который становится острее вместе с тобой.",
+      "An edge that sharpens with every spell you learn.": "Лезвие, которое остреет с каждым выученным заклинанием.",
+      "Two hands, one very long career.": "Две руки — и впереди долгая карьера.",
+      "A caster stave that keeps pace with its bearer.": "Посох заклинателя, который растёт вместе с владельцем.",
+      "A staff swung, not channeled. Strength and stamina.": "Этим посохом бьют, а не проводят через него магию. Сила и выносливость.",
+      "Agility and attack power at range, forever.": "Ловкость и сила атаки для боя на расстоянии — навсегда.",
+      "A firearm that answers to intellect. Only a Hero would think to try.": "Огнестрельное оружие, зависящее от интеллекта. Только Герой мог до такого додуматься.",
+      "Full plate that channels spell power. Cast from inside a fortress.": "Полный латный доспех, проводящий силу заклинаний. Настоящая крепость.",
+      "Spellcaster shoulders, in the heaviest armor there is.": "Наплечники заклинателя в самой тяжёлой броне.",
+      "Mail that grows with the arm inside it.": "Кольчуга, которая растёт вместе с рукой в ней.",
+      "Strength and stamina, on a mail frame.": "Сила и выносливость в кольчужном обрамлении.",
+      "Light leather for a heavy hitter.": "Лёгкая кожа для бойца с тяжёлым ударом.",
+      "Strength on the shoulders of a scout.": "Сила на плечах разведчика.",
+      "A robe carrying attack power and agility. Nobody else would dare.": "Мантия, усиливающая силу атаки и ловкость. Другие не осмелились бы её надеть.",
+      "Silk shoulders for a knife fighter.": "Шёлковые наплечники для бойца с кинжалом.",
+      "Mail that favors intellect and spirit over brawn.": "Кольчуга, в которой интеллект и дух важнее грубой силы.",
+      "Spell power leather: mobility without the silk.": "Кожаный доспех для заклинателя: подвижность без шёлка.",
+      "A cloak woven for spellcasters, and it grows with them.": "Плащ для заклинателей, который растёт вместе с ними.",
+      "A cloak that keeps pace with you, level after level.": "Плащ, который становится лучше с каждым твоим уровнем.",
+      "Pure spell power, scaled to whoever holds it.": "Чистая сила заклинаний, подстраивающаяся под владельца.",
+      "Pure haste. Everything you do, sooner.": "Чистая скорость. Всё получается быстрее.",
+      "Pure critical strike, whatever it is you are striking with.": "Чистый критический удар — каким бы оружием ты ни бил."
+    },
+    "nemesis_trophies": {
+      "Bloodlust": "Кровожадность",
+      "Ironhide": "Железная шкура",
+      "Spellward": "Защита от чар",
+      "Venomous": "Ядовитость",
+      "Unyielding": "Несгибаемость",
+      "Warband": "Боевая дружина",
+      "Relentless": "Неумолимость",
+      "effects": {
+        "haste": "Скорость",
+        "armor": "Броня",
+        "resistance": "Сопротивление всем школам магии",
+        "critical strike chance": "Шанс критического удара",
+        "maximum health": "Максимальное здоровье",
+        "attack power and spell power": "Сила атаки и сила заклинаний",
+        "all primary stats": "Все основные характеристики",
+        "resistance to every school": "Сопротивление всем школам магии"
+      }
+    },
+    "special_names": {
+      "Reroll Scroll": "Свиток переброса",
+      "Nemesis Charm": "Амулет Немезиды"
+    },
+    "special_descriptions": {
+      "Reroll Scroll": "Позволяет перебросить одну способность или талант в режиме «Случайный путь». Переброс стоит три эссенции способности или таланта.",
+      "Nemesis Charm": "Оберег для охоты на Немезиду. Носите его с собой, когда отправляетесь в поход. Нельзя покинуть поход, пока оберег у вас."
+    }
+  },
+  "archetypes": {
+    "1": {
+      "name": "Клинок пепла",
+      "description": "Воин и маг в одном клинке: огненные удары и рассечения, огненные шары между атаками и сигнальный костёр на поле боя."
+    },
+    "2": {
+      "name": "Ледопламенный дуэлянт",
+      "description": "Разбойник и маг: в одной руке огонь, в другой — лёд. Обжигающие и замораживающие удары, а «Взрыв противоположностей» соединяет обе стихии."
+    },
+    "3": {
+      "name": "Пепельный жнец",
+      "description": "Воин и чернокнижник, владеющие огнём и тьмой: обжигающие и теневые удары, проклятия и души огня, а огненная турель удерживает позицию."
+    },
+    "4": {
+      "name": "Несущий чуму",
+      "description": "Разбойник и чернокнижник, сочетающие яд и тьму: отравленные и затенённые клинки, порча и агония, а у ног крадётся жук."
+    },
+    "5": {
+      "name": "Странник рассвета",
+      "description": "Охотник и паладин, озарённые Светом и тайной магией: освящённые и магические выстрелы, печати и правосудие для ближнего боя."
+    },
+    "6": {
+      "name": "Коготь Бездны",
+      "description": "Друид и жрец, повелевающие тьмой: кошачьи когти и полосующие удары несут силу Бездны, перед прыжком звучат слова Тьмы, а врага добивает теневой дух."
+    },
+    "7": {
+      "name": "Сумеречный рыцарь",
+      "description": "Воин и жрец на границе Света и тьмы: священные и теневые удары, щит веры и взрывы разума вблизи."
+    },
+    "8": {
+      "name": "Чародейский стрелок",
+      "description": "Охотник и маг владеют тайной магией и льдом: чародейские и ледяные стрелы, скачок из опасности и ледяные копья, пока ловушка держит врага."
+    },
+    "9": {
+      "name": "Неудержимый воин",
+      "description": "Друид и воин владеют землёй: могучий медведь наносит увечья и калечит, а крики и громовые удары воина не дают врагам отступить."
+    },
+    "10": {
+      "name": "Громовой крестоносец",
+      "description": "Паладин и шаман соединяют Свет и бурю: печати и правосудие на клинке неистовства ветра, шоки и освящение, а тотемы стоят у ног."
+    },
+    "11": {
+      "name": "Зимний следопыт",
+      "description": "Охотник и шаман владеют льдом: ледяные выстрелы и ловушки, кромка ледяного клейма и цепная молния; земной захват не даёт добыче уйти."
+    },
+    "12": {
+      "name": "Ядовитый ловчий",
+      "description": "Друид и разбойник сочетают яд и землю: кошачьи когти отравлены, яды разбойника усиливают каждый полосующий удар, а земные удары ломают броню."
+    },
+    "13": {
+      "name": "Инквизитор",
+      "description": "Паладин и разбойник служат Свету: освящённые коварные удары и внезапные атаки, печать за каждым ударом и божественный щит для спасения."
+    },
+    "14": {
+      "name": "Звёздный мудрец",
+      "description": "Друид и маг владеют тайной магией и огнём: лунный огонь и звёздный огонь, огненные шары и огненный столб; если этого мало — взрыв противоположностей."
+    },
+    "15": {
+      "name": "Призыватель могил",
+      "description": "Жрец и чернокнижник повелевают тьмой и чумой: щиты и исцеление для союзников, чума, порча и истощение для остальных."
+    },
+    "16": {
+      "name": "Повелитель зверей",
+      "description": "Охотник и чернокнижник никогда не остаются одни: приручённый зверь, демон, ядовитый жук и турель, а сверху — огненные и теневые стрелы."
+    },
+    "17": {
+      "name": "Огненный безумец",
+      "description": "Маг и чернокнижник согласны лишь в одном: всё должно гореть. Огненные шары, жертвенный огонь, адское пламя, дождь огня и сигнальный костёр для финала."
+    },
+    "18": {
+      "name": "Плут",
+      "description": "Разбойник и жрец умеют выкрутиться словами: успокоить противника, обчистить его карманы и подчинить разум; если не выйдет — ударить из тени."
+    },
+    "19": {
+      "name": "Меняющий облик",
+      "description": "Друид и шаман не задерживаются в одном облике: по очереди волк, медведь и кошка, земные и ледяные удары, а между превращениями — исцеляющие волны."
+    },
+    "20": {
+      "name": "Мастер на все руки",
+      "description": "Подпись каждого класса и линия Героя объединены в одном стиле: «Мастер на все руки», «Репертуар» и «Всплеск случайного пути»."
+    }
+  }
+}
