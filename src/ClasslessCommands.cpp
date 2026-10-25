@@ -130,7 +130,7 @@ public:
                 "Заряды переброса: {} (вы получаете {} за уровень, начиная с уровня {}; каждый позволяет перебросить способность или талант)"),
                 st.rerolls, sClasslessMgr->cfg.wcRerollsPerLevel, sClasslessMgr->cfg.wcRollStartLevel);
             SendFormatted(handler, LocaleText(player, "Synergy chance: {}% (rises each time you reroll)",
-                "Шанс синергии: {}% (увеличивается после каждого переброса)"),
+                "Шанс сочетания: {}% (увеличивается после каждого переброса)"),
                 std::min<uint32>(sClasslessMgr->cfg.wcSynergyBaseChance + st.pity * sClasslessMgr->cfg.wcSynergyIncrement, 100));
             if (st.bans.empty())
                 SendFormatted(handler, LocaleText(player, "On reroll cooldown: none", "Ожидающих переброса способностей нет."));

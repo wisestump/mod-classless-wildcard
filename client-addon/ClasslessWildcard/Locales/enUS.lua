@@ -11,6 +11,7 @@ ClasslessWildcardLocaleData = {
     types = { "All", "Melee", "Ranged", "Spells", "Heals", "Utility", "Passive" },
     scopes = { "My level", "Any level" },
     text = {
+        ["Ironhide trait"] = "Ironhide",
         ["%d life out of %d remains"] = "%d of %d life left",
         ["%d lives (few) out of %d remain"] = "%d of %d lives left",
         ["%d lives out of %d remain"] = "%d of %d lives left",

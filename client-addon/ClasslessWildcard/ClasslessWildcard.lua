@@ -10930,7 +10930,7 @@ end
 -- (effect - 1) * 3 + (stars - 1); the charm is 991030.
 CW.NEMESIS_FX = {
     { name = "Bloodlust", what = "haste", pct = true },
-    { name = "Ironhide", what = "armor", pct = true },
+    { name = "Ironhide trait", what = "armor", pct = true },
     { name = "Spellward", what = "resistance to every school" },
     { name = "Venomous", what = "critical strike chance", pct = true },
     { name = "Unyielding", what = "maximum health", pct = true },

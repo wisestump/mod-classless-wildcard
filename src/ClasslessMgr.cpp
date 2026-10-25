@@ -122,16 +122,25 @@ namespace
         ChatHandler(player->GetSession()).SendSysMessage(std::string(MSG_PREFIX) + text);
     }
 
-    // A title as it reads on this character's name ("Arthas the Reborn"),
-    // in the client's own language where the row has one. Empty if the
-    // title is not loaded.
+    // Read the title by its DBC ID in the client's locale and choose the
+    // grammatical form for this character. Empty if the title is not loaded.
     std::string TitleText(Player* player, uint32 titleId)
     {
         CharTitlesEntry const* title = titleId ? sCharTitlesStore.LookupEntry(titleId) : nullptr;
-        if (!title)
+        if (!title || !player)
             return "";
-        char const* fmt = title->nameMale[player->GetSession()->GetSessionDbcLocale()];
+
+        char const* const* names = player->getGender() == GENDER_FEMALE
+            ? title->nameFemale : title->nameMale;
+        LocaleConstant const locale = player->GetSession()->GetSessionDbcLocale();
+        char const* fmt = names[locale];
+        // Prefer a localized masculine fallback over an English female one
+        // when a title row has no female string for this locale.
+        if ((!fmt || !*fmt) && names != title->nameMale)
+            fmt = title->nameMale[locale];
         if (!fmt || !*fmt)
+            fmt = names[LOCALE_enUS];
+        if ((!fmt || !*fmt) && names != title->nameMale)
             fmt = title->nameMale[LOCALE_enUS];
         std::string text = fmt ? fmt : "";
         std::size_t const at = text.find("%s");
@@ -3294,7 +3303,7 @@ bool ClasslessMgr::Rebirth(Player* player, std::vector<uint32> const& heirlooms,
             "В начале у вас будет |cff00ff00{}|r эссенции способностей и |cff00ff00{}|r эссенции талантов."),
             st.abilityEssence, st.talentEssence));
     else
-        Msg(player, LocaleText(player, "A new starting hand has been dealt.", "Вы получили новую стартовую руку способностей."));
+        Msg(player, LocaleText(player, "A new starting hand has been dealt.", "Вы получили новый стартовый набор способностей."));
     if (!titleText.empty())
         Msg(player, Acore::StringFormat(LocaleText(player, "New title: |cffffd100{}|r.", "Новое звание: |cffffd100{}|r."), titleText));
     Msg(player, Acore::StringFormat(LocaleText(player,
@@ -3433,7 +3442,7 @@ namespace
           "Read every ability you are dealt and find the few that work together, then build around them. Talents are dealt too, so look over My Build after each level. Stat points are still yours to place, so use them to cover what the hand is missing.",
           Mode::Wildcard, { "Что выпало, то выпало",
             "Только для героев случайного пути. Бесконечные жизни. Перебросы запрещены, включая стартовый набор. Вы играете всеми способностями и талантами, которые выдаёт случайный путь.",
-            "Это испытание доступно героям случайного пути и даёт бесконечные жизни: смерть не завершает забег. С его начала запрещены любые перебросы — стартовой руки, способностей и талантов, получаемых при повышении уровня. Свиток переброса тоже не поможет. Заряды переброса продолжат накапливаться за уровни; использовать их можно будет после завершения испытания.",
+            "Это испытание доступно героям случайного пути и даёт бесконечные жизни: смерть не завершает забег. С его начала запрещены любые перебросы — стартового набора, способностей и талантов, получаемых при повышении уровня. Свиток переброса тоже не поможет. Заряды переброса продолжат накапливаться за уровни; использовать их можно будет после завершения испытания.",
             "Изучайте каждую выданную способность и ищите сочетания, на которых можно построить сборку. Таланты тоже выдаются случайно, поэтому после каждого уровня проверяйте свою сборку. Очки характеристик распределяйте сами — ими можно компенсировать слабые стороны полученной руки." } },
         { 3,  "hardcore",        "Hardcore",        1, "One life, plus your extra life if you hold one. When it is gone the run ends.", 1000, 188, "last_breath",
           "You have one life, two if you hold an extra life when you start. When the last is lost the run is over, though you keep your level, gear and build and simply carry on without the rule. Deaths in battlegrounds and arenas, and while you are dueling, do not count. The largest gold reward of any challenge.",
@@ -8656,7 +8665,7 @@ uint32 ClasslessMgr::RollAbility(Player* player, GrantSource source)
         st.pity = 0;
         if (!_revealSuppress)
             Msg(player, Acore::StringFormat(LocaleText(player, "|cff00ff88Synergy roll!|r {} fits the abilities you already own.",
-                "|cff00ff88Сработала синергия!|r Способность «{}» подходит к вашей сборке."),
+                "|cff00ff88Сочетание способностей!|r Способность «{}» подходит к вашей сборке."),
                 SpellName(chosen->firstSpellId, player)));
     }
 
@@ -8811,7 +8820,7 @@ uint32 ClasslessMgr::RollTalent(Player* player)
             st.pity = 0;
             if (!_revealSuppress)
                 Msg(player, Acore::StringFormat(LocaleText(player, "|cff00ff88Synergy roll!|r {} fits the abilities you already own.",
-                    "|cff00ff88Сработала синергия!|r Талант «{}» подходит к вашей сборке."),
+                    "|cff00ff88Сочетание способностей!|r Талант «{}» подходит к вашей сборке."),
                     SpellName(chosen->rankSpells[0], player)));
         }
 
@@ -9116,7 +9125,7 @@ bool ClasslessMgr::SetLock(Player* player, uint32 firstSpellId, bool locked, std
     {
         if (err) *err = Acore::StringFormat(LocaleText(player,
             "Padlocks only matter while the starting hand is open (below level {}). From there you reroll one ability at a time, and only the one you pick.",
-            "Закрепление нужно только пока доступна стартовая раздача — до {} уровня. После неё способности перебрасываются по одной, на ваш выбор."),
+            "Закрепление нужно только пока доступен стартовый набор — до {} уровня. После этого способности перебрасываются по одной, на ваш выбор."),
             uint32(cfg.wcFreeRerollLevel));
         return false;
     }

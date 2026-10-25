@@ -29,13 +29,22 @@ def spell_tokens_match(source: str, translated: str) -> bool:
     translated_tokens = sorted(SPELL_TOKEN.findall(translated))
     if source_tokens == translated_tokens:
         return True
-    if ("$lpoint:points;" in source_tokens and
-            "$lpoint:points;" not in translated_tokens and
-            "серии приёмов" in translated.lower() and
-            source_tokens.count("$lpoint:points;") == 1):
-        source_tokens.remove("$lpoint:points;")
-        return source_tokens == translated_tokens
-    return False
+
+    # These Russian descriptions keep the numeric spell token and express
+    # the count in words, avoiding English plural forms and awkward declension.
+    # Permit only these known count-form omissions, and only when the matching
+    # localized wording is present; all numeric/effect tokens must still match.
+    allowed_omissions = {
+        "$lpoint:points;": "серии приёмов",
+        "$ltime:times;": "дополнительных рикошетов",
+        "$lenemy:enemies;": "противников рядом с телом",
+    }
+    for token, russian_anchor in allowed_omissions.items():
+        if (source_tokens.count(token) == 1 and
+                translated_tokens.count(token) == 0 and
+                russian_anchor in translated.lower()):
+            source_tokens.remove(token)
+    return source_tokens == translated_tokens
 
 
 def reject_question_corruption(value, path: str) -> None:
@@ -166,7 +175,7 @@ def main() -> int:
             if original:
                 source_tokens = sorted(SPELL_TOKEN.findall(original))
                 translated_tokens = sorted(SPELL_TOKEN.findall(localized[field]))
-                if source_tokens != translated_tokens:
+                if not spell_tokens_match(original, localized[field]):
                     raise SystemExit("spell placeholders differ at %s (%s): %r != %r" %
                                      (row["id"], field, source_tokens, translated_tokens))
     translated_spell_count = sum(bool(row.get("ruRU")) for row in spell_rows)
