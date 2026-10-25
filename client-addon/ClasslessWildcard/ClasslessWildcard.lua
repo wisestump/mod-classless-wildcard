@@ -6692,9 +6692,9 @@ end
 -- the other pools (movable; /cwbars toggles them).
 -- ---------------------------------------------------------------------------
 local POWER_INFO = {
-    { index = 0, key = "mana",   name = "Mana",   r = 0.25, g = 0.45, b = 1.00 },
-    { index = 1, key = "rage",   name = "Rage",   r = 1.00, g = 0.25, b = 0.25 },
-    { index = 3, key = "energy", name = "Energy", r = 1.00, g = 0.90, b = 0.25 },
+    { index = 0, key = "mana",   name = CWText("Mana"),   r = 0.25, g = 0.45, b = 1.00 },
+    { index = 1, key = "rage",   name = CWText("Rage"),   r = 1.00, g = 0.25, b = 0.25 },
+    { index = 3, key = "energy", name = CWText("Energy"), r = 1.00, g = 0.90, b = 0.25 },
 }
 
 -- Every layout number for this frame in one place, and every row centred from
@@ -6719,9 +6719,9 @@ local BARS = {
 
 -- Every row the frame can draw, in the order the settings panel lists them.
 BARS.ROWS = {
-    { key = "mana",   label = "Mana" },
-    { key = "rage",   label = "Rage" },
-    { key = "energy", label = "Energy" },
+    { key = "mana",   label = CWText("Mana") },
+    { key = "rage",   label = CWText("Rage") },
+    { key = "energy", label = CWText("Energy") },
     { key = "runes",  label = "Runes" },
     { key = "runic",  label = "Runic Power" },
 }
