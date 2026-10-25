@@ -367,7 +367,7 @@ public:
         SendFormatted(handler, LocaleText(player,
             "This sends you back to level 1 for {} gold. Your build is wiped{} and your worn "
             "gear goes into your bags (by mail if they are full); gold, bank, reputation, riding, flight paths and the heirlooms you list stay.",
-            "Вы начнёте новую жизнь с 1-го уровня за {} золотых. Сборка будет сброшена{}, а надетое снаряжение попадёт в сумки (или будет отправлено почтой, если сумки полны); золото, банк, репутация, навык верховой езды, маршруты полёта и указанные унаследованные способности сохранятся."),
+            "Вы начнёте новую жизнь с 1-го уровня за {} золотых. Сборка будет сброшена{}, а надетое снаряжение попадёт в сумки (или будет отправлено почтой, если сумки полны); золото, банк, репутация, навык верховой езды, маршруты полёта и указанные фамильные способности сохранятся."),
             sClasslessMgr->RebirthCost(sClasslessMgr->GetState(player)),
             LocaleText(player, keepQuests ? ", your quests are kept," : " along with your quest progress,",
                 keepQuests ? ", задания сохраняются," : " вместе с вашим прогрессом заданий,"));

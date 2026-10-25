@@ -164,9 +164,9 @@ namespace
         else if (st.mode == Mode::Classless)
         {
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER, Acore::StringFormat(LocaleText(player,
-                "Browse abilities by class  |cff00ff00[{} AE]|r", "Способности по классам  |cff00ff00[{} СС]|r"), st.abilityEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_CLASSES);
+                "Browse abilities by class  |cff00ff00[{} AE]|r", "Способности по классам  |cff00ff00[{} ЭС]|r"), st.abilityEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_CLASSES);
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER, Acore::StringFormat(LocaleText(player,
-                "Browse talents  |cff00ff00[{} TE]|r", "Таланты  |cff00ff00[{} СТ]|r"), st.talentEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_TALENTS);
+                "Browse talents  |cff00ff00[{} TE]|r", "Таланты  |cff00ff00[{} ЭТ]|r"), st.talentEssence), GOSSIP_SENDER_MAIN, ACT_BROWSE_TALENTS);
             // The old "learn by spell ID" entries are gone: a coded gossip
             // option opens the client's generic ENTER_CODE popup, which ignores
             // the prompt we set and expects a raw spell id nobody has to hand.
@@ -421,7 +421,8 @@ namespace
             uint32 unlock = e->rankLevels.empty() ? 1u : uint32(e->rankLevels[0]);
             bool tooHigh = sClasslessMgr->cfg.respectLevelReqs && unlock > player->GetLevel();
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER,
-                Acore::StringFormat("{}{}|r  [{} AE]  {}Lv {}|r{}", RarityColor(e->rarity),
+                Acore::StringFormat(LocaleText(player, "{}{}|r  [{} AE]  {}Lv {}|r{}",
+                    "{}{}|r  [{} ЭС]  {} ур. {}|r{}"), RarityColor(e->rarity),
                     SpellNameOf(e->firstSpellId, player->GetSession()->GetSessionDbcLocale()),
                     sClasslessMgr->AbilityCost(*e), tooHigh ? "|cffff4444" : "|cff888888", unlock,
                     e->passive ? LocaleText(player, " (passive)", " (пассивная)") : ""),
@@ -487,12 +488,12 @@ namespace
             else
             {
                 uint32 const cost = (cfg.talentFlatCost && owned > 0) ? 0 : cfg.talentCostPerRank;
-                price = cost ? Acore::StringFormat(LocaleText(player, "[{} TE]", "[{} СТ]"), cost)
+                price = cost ? Acore::StringFormat(LocaleText(player, "[{} TE]", "[{} ЭТ]"), cost)
                     : LocaleText(player, "[free]", "[бесплатно]");
             }
             AddGossipItemFor(player, GOSSIP_ICON_TRAINER,
                 Acore::StringFormat(LocaleText(player, "{}{}|r  [{}/{}]  {}  {}Tier {}, Lv {}|r",
-                    "{}{}|r  [{}/{}]  {}  {}Уровень таланта {}, ур. {}|r"), RarityColor(t->rarity),
+                    "{}{}|r  [{}/{}]  {}  {}Ярус талантов {}, ур. {}|r"), RarityColor(t->rarity),
                     SpellNameOf(t->rankSpells[0], player->GetSession()->GetSessionDbcLocale()),
                     owned, t->maxRank, price,
                     tooHigh ? "|cffff4444" : "|cff888888", t->row + 1, unlock),
@@ -543,7 +544,7 @@ namespace
                             ? LocaleText(player, "came free with another ability", "получена вместе с другой способностью")
                         : o.source == GrantSource::Talent
                             ? LocaleText(player, "came with a talent", "получена вместе с талантом")
-                            : LocaleText(player, "heirloom, kept through Rebirth", "унаследованная способность, сохраняется при перерождении")),
+                            : LocaleText(player, "heirloom, kept through Rebirth", "фамильная способность, сохраняется при перерождении")),
                     GOSSIP_SENDER_MAIN, BASE_MY_ABILITIES_PG + page);
                 continue;
             }

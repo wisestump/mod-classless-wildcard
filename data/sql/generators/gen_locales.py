@@ -143,7 +143,7 @@ def item_locale(row: dict[str, object], catalog: dict) -> dict[str, str] | None:
     templates = catalog.get("item_templates", {})
     if name in templates.get("special_names", {}):
         return {"name": templates["special_names"][name],
-                "description": templates.get("special_descriptions", {}).get(description, "")}
+                "description": templates.get("special_descriptions", {}).get(name, "")}
 
     tier_suffixes = templates.get("tier_suffixes", {})
     for prefix in sorted(tier_suffixes, key=len, reverse=True):
@@ -168,7 +168,7 @@ def item_locale(row: dict[str, object], catalog: dict) -> dict[str, str] | None:
             if effect:
                 count = description_match.group(1)
                 return {"name": "Трофей " + title + " " + trophy.group(2),
-                        "description": "%s звезда: %s. Действует из сумки во время похода Немезиды. Нельзя вынести из похода." % (count, effect)}
+                        "description": "Звёзд: %s. %s. Действует из сумки во время испытания «Немезида». Нельзя перемещать из сумок." % (count, effect)}
         return None
 
     translated_name = templates.get("names", {}).get(name)

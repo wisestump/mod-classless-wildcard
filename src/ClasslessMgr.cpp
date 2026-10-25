@@ -3175,7 +3175,7 @@ bool ClasslessMgr::Rebirth(Player* player, std::vector<uint32> const& heirlooms,
         if (err && IsRussian(player))
             *err = Acore::StringFormat("При Перерождении можно сохранить: {} {}.", MaxHeirlooms(st),
                 LocaleCount(player, MaxHeirlooms(st), "heirloom", "heirlooms",
-                            "унаследованную способность", "унаследованные способности", "унаследованных способностей"));
+                            "фамильную способность", "фамильные способности", "фамильных способностей"));
         else if (err)
             *err = Acore::StringFormat("You may carry {} heirloom{} into this Rebirth.", MaxHeirlooms(st),
                                        MaxHeirlooms(st) == 1 ? "" : "s");
@@ -3364,9 +3364,9 @@ namespace
           "~Your nemesis~ You have unlimited lives on this run, and a death takes nothing from you. The creature that kills you becomes your nemesis instead, that one creature, for you alone. It waits for you where it lives as a rare elite {nemesis_levels} levels above you, or at its own level if that is higher, and it stays at least that far above you as you level, so every miss, dodge and resist in the fight is a real higher level foe's. ^ It wears a red arrow over its head, shows as a rare elite on your target frame and is on your minimap. Other players see and fight it as it always was. ^ ~Strengths and weaknesses~ Each nemesis has a strength and a weakness. You learn its strengths when a fight with it starts, and its weakness when you find it. Each time it kills you again it grows larger, up to twice its size, and gains another strength, up to three. ^ ~Swear Vendetta~ You learn it on this run. It makes a nemesis of a creature you choose in the open world, at your level or above, and not an elite or a boss. It becomes a Sworn nemesis, {sworn_levels} levels above you (or at its own level if that is higher), with Bloodlust, one more strength and a weakness. You can have one Sworn nemesis at a time, and swear again every {sworn_cooldown} minutes. ^ ~The kill~ Kill a nemesis, alone or with your pet, and you get the experience of an elite of its level with {nemesis_bonus} more, or {sworn_bonus} more for a Sworn one. It drops classless gear as often as a rare, heirloom roll included, and a Sworn one always drops a piece. It gives Vengeance: {marked_vengeance}, or {sworn_vengeance} for a Sworn one. If you are dead when it falls, the mark stays. ^ ~Trophies~ Each kill also drops a trophy of one of its strengths, chosen at random, with a star for each strength it had and one more if it was Sworn, up to three. Trophies work from your bags for the rest of the run, and all of them add up. You can carry {trophy_max}. Another waits until you destroy one, and one that finds your bags full waits for room. They cannot leave your bags: no bank, trade, mail or sale. ^ ~Finishing~ Reach level 80 with {vengeance} Vengeance. Reaching 80 first does not end the run, it ends when your Vengeance reaches the mark. When you finish, the best trophy of each kind adds its stars to your Nemesis Charm, up to five in each. The charm is yours for good: it works from your bags, and it cannot leave them or be destroyed. A run that ends unfinished loses its trophies. ^ ~No nemesis~ Deaths in dungeons and raids make no nemesis, and neither do deaths to elites, bosses, pets, totems or summoned creatures.",
           "Remember what killed you and where. Your nemesis waits where it lives and stays above your level, so go back when you are ready for a harder fight rather than waiting for it to be easy. ^ Every death to it makes it larger and stronger. ^ Hover the challenge tracker for what you have learned of each nemesis and where it lives. The world map marks it too. ^ A Sworn nemesis is worth more Vengeance and a better trophy.",
           Mode::Unchosen, { "Немезида",
-            "Бесконечные жизни. Убившее вас существо становится вашей Немезидой: редким элитным противником как минимум на {nemesis_levels} уровней выше вас, которого видите только вы. За каждую побеждённую Немезиду вы получаете Возмездие, равное её уровню. Достигните 80-го уровня и накопите {vengeance} Возмездия, чтобы завершить испытание.",
-            "~Ваша Немезида~ В этом испытании смерть не отнимает жизни. Существо, убившее вас, становится вашей личной Немезидой и ждёт вас там, где обитает. Это редкий элитный противник на {nemesis_levels} уровней выше вас или не ниже собственного уровня. По мере вашего роста он сохраняет это преимущество, поэтому промахи, уклонения и сопротивления в бою будут свойственны противнику более высокого уровня. ^ Над его головой появляется красная стрелка, а рамка цели показывает редкого элитного противника; его также видно на миникарте. Другие игроки видят и сражаются с обычным существом. ^ ~Сильные и слабые стороны~ У каждой Немезиды есть сильная и слабая сторона. Сильные стороны раскрываются в начале боя, слабая — когда вы её обнаружите. После каждой новой вашей смерти Немезида увеличивается, максимум вдвое, и получает ещё одну сильную сторону, всего до трёх. ^ ~Клятва мести~ В этом испытании вы изучите заклинание клятвы мести. Оно превращает выбранное вами существо открытого мира не ниже вашего уровня (но не элиту или босса) в Немезиду. Такая Немезида считается Призванной: она будет на {sworn_levels} уровней выше вас либо не ниже собственного уровня, получит Жажду крови, дополнительную сильную сторону и слабость. Одновременно может быть только одна Призванная Немезида; новую клятву можно дать раз в {sworn_cooldown} минут. ^ ~Победа~ Убейте Немезиду в одиночку или вместе с питомцем и получите опыт как за элитного противника её уровня, а также ещё {nemesis_bonus}, за Призванную Немезиду — ещё {sworn_bonus}. Она с вероятностью редкого существа выбрасывает классовое снаряжение, включая фамильную вещь; Призванная всегда оставляет одну вещь. Вы получите Возмездие: {marked_vengeance}, а за Призванную — {sworn_vengeance}. Если вы погибнете одновременно с ней, метка сохранится. ^ ~Трофеи~ Каждая Немезида оставляет случайный трофей одной из своих сильных сторон. За каждую такую сторону трофей получает звезду, а Призванный противник — ещё одну, всего не более трёх. Трофеи действуют, пока находятся в сумках, и их звёзды суммируются. Можно носить до {trophy_max} трофеев; новый будет ждать, пока вы не уничтожите один или не освободите место. Трофеи нельзя положить в банк, передать, отправить почтой или продать. ^ ~Завершение~ Достигните 80-го уровня и накопите {vengeance} Возмездия. Само достижение 80-го уровня не завершает испытание: нужно набрать указанное Возмездие. После завершения лучший трофей каждого типа добавит звёзды к Талисману Немезиды, максимум пять для каждого типа. Талисман навсегда останется вашим и действует из сумок; его нельзя передать или уничтожить. Если испытание закончится раньше, вы потеряете трофеи. ^ ~Без Немезиды~ Смерти в подземельях и рейдах не создают Немезид, как и смерти от элитных противников, боссов, питомцев, тотемов и призванных существ.",
-            "Запомните, кто и где вас убил. Немезида ждёт в месте своего обитания и остаётся сильнее вас, поэтому возвращайтесь, когда будете готовы к трудному бою. ^ Каждая новая смерть от её руки делает её крупнее и сильнее. ^ Наведите курсор на отслеживание испытания, чтобы посмотреть, что известно о Немезиде и где она обитает. Она также отмечена на карте мира. ^ Победа над Призванной Немезидой приносит больше Возмездия и лучший трофей." } },
+            "Бесконечные жизни. Убившее вас существо становится вашей Немезидой: редким элитным противником как минимум на {nemesis_levels} уровней выше вас, которого видите только вы. За каждую побеждённую Немезиду вы получаете Мщение, равное её уровню. Достигните 80-го уровня и накопите {vengeance} Мщения, чтобы завершить испытание.",
+            "~Ваша Немезида~ В этом испытании смерть не отнимает жизни. Существо, убившее вас, становится вашей личной Немезидой и ждёт вас там, где обитает. Это редкий элитный противник на {nemesis_levels} уровней выше вас или не ниже собственного уровня. По мере вашего роста он сохраняет это преимущество, поэтому промахи, уклонения и сопротивления в бою будут свойственны противнику более высокого уровня. ^ Над его головой появляется красная стрелка, а рамка цели показывает редкого элитного противника; его также видно на миникарте. Другие игроки видят и сражаются с обычным существом. ^ ~Сильные и слабые стороны~ У каждой Немезиды есть сильная и слабая сторона. Сильные стороны раскрываются в начале боя, слабая — когда вы её обнаружите. После каждой новой вашей смерти Немезида увеличивается, максимум вдвое, и получает ещё одну сильную сторону, всего до трёх. ^ ~Клятва мести~ В этом испытании вы изучите заклинание клятвы мести. Оно превращает выбранное вами существо открытого мира не ниже вашего уровня (но не элиту или босса) в Немезиду. Такая Немезида считается связанной клятвой: она будет на {sworn_levels} уровней выше вас либо не ниже собственного уровня, получит Жажду крови, дополнительную сильную сторону и слабость. Одновременно может быть только одна Немезида, связанная клятвой; новую клятву можно дать раз в {sworn_cooldown} минут. ^ ~Победа~ Убейте Немезиду в одиночку или вместе с питомцем и получите опыт как за элитного противника её уровня, а также ещё {nemesis_bonus}, за Немезиду, связанную клятвой — ещё {sworn_bonus}. Она с вероятностью редкого существа выбрасывает классовое снаряжение, включая фамильную вещь; Немезида, связанная клятвой, всегда оставляет одну вещь. Вы получите Мщение: {marked_vengeance}, а за Немезиду, связанную клятвой, — {sworn_vengeance}. Если вы погибнете одновременно с ней, метка сохранится. ^ ~Трофеи~ Каждая Немезида оставляет случайный трофей одной из своих сильных сторон. За каждую такую сторону трофей получает звезду, а противник, связанный клятвой, — ещё одну, всего не более трёх. Трофеи действуют, пока находятся в сумках, и их звёзды суммируются. Можно носить до {trophy_max} трофеев; новый будет ждать, пока вы не уничтожите один или не освободите место. Трофеи нельзя положить в банк, передать, отправить почтой или продать. ^ ~Завершение~ Достигните 80-го уровня и накопите {vengeance} Мщения. Само достижение 80-го уровня не завершает испытание: нужно набрать указанное Мщение. После завершения лучший трофей каждого типа добавит звёзды к Талисману Немезиды, максимум пять для каждого типа. Талисман навсегда останется вашим и действует из сумок; его нельзя передать или уничтожить. Если испытание закончится раньше, вы потеряете трофеи. ^ ~Без Немезиды~ Смерти в подземельях и рейдах не создают Немезид, как и смерти от элитных противников, боссов, питомцев, тотемов и призванных существ.",
+            "Запомните, кто и где вас убил. Немезида ждёт в месте своего обитания и остаётся сильнее вас, поэтому возвращайтесь, когда будете готовы к трудному бою. ^ Каждая новая смерть от её руки делает её крупнее и сильнее. ^ Наведите курсор на отслеживание испытания, чтобы посмотреть, что известно о Немезиде и где она обитает. Она также отмечена на карте мира. ^ Победа над Немезидой, связанной клятвой приносит больше Мщения и лучший трофей." } },
         { 2,  "elite_world",     "Elite World",     5, "Every enemy is an elite for you, with elite health, damage and experience.", 750, 187, "giantsbane",
           "Every enemy you can fight is an elite for you alone, from the moment it comes into sight. You see the health this realm gives elites and the elite border on your target frame, it hits you and your pet with an elite's damage, melee and spells alike, it takes as many hits as an elite to bring down, and it pays you elite experience and drops classless gear as often as a rare, heirloom roll included. Rares are rare elites. Enemies that are already elite, rare elite or bosses are left as they are, in dungeons too, and pets, totems, summoned creatures, critters and civilians never change. Other players see and fight every one of them as it always was. Pull one at a time, and use every stun, slow and snare you own.",
           "Pull one enemy at a time and rest between fights. Stuns, fears, slows and snares matter far more than usual. Anything that would be a fair fight on your own is now a group fight, so find others for it.",
@@ -3892,7 +3892,7 @@ void ClasslessMgr::EndRun(Player* player, bool finished, bool byRebirth)
         if (rewardSpell)
             Msg(player, Acore::StringFormat(LocaleText(player,
                 "|cffa335ee{}|r is yours as an heirloom: usable from level 1 and kept through every Rebirth.",
-                "|cffa335ee{}|r теперь ваша унаследованная способность: доступна с 1-го уровня и сохраняется после каждого Перерождения."),
+                "|cffa335ee{}|r теперь ваша фамильная способность: доступна с 1-го уровня и сохраняется после каждого Перерождения."),
                 SpellName(rewardSpell, player)));
         if (!titleText.empty())
             Msg(player, Acore::StringFormat(LocaleText(player, "New title: |cffffd100{}|r.",
@@ -4083,7 +4083,7 @@ std::string ClasslessMgr::NemesisStrengthName(uint8 strength, Player* player)
 {
     static char const* const english[NS_COUNT] = { "", "Bloodlust", "Ironhide", "Spellward", "Venomous",
                                                     "Unyielding", "Warband", "Relentless" };
-    static char const* const russian[NS_COUNT] = { "", "Жажда крови", "Железная шкура", "Защита от магии", "Ядовитость",
+    static char const* const russian[NS_COUNT] = { "", "Жажда крови", "Железная шкура", "Защита от чар", "Ядовитость",
                                                     "Несгибаемость", "Боевой отряд", "Неутомимость" };
     if (strength >= NS_COUNT)
         return {};
@@ -4205,7 +4205,7 @@ bool ClasslessMgr::CanSwearVendetta(Player* player, Creature* target, std::strin
     for (auto const& [spawnId, mark] : st->nemeses)
         if (mark.kind == NEMESIS_SWORN)
             return fail("You have a sworn nemesis already. Slay it first.",
-                        "У вас уже есть Призванная Немезида. Сначала победите её.");
+                        "У вас уже есть Немезида, связанная клятвой. Сначала победите её.");
     return true;
 }
 
@@ -4317,7 +4317,7 @@ bool ClasslessMgr::IsSwornCopy(Creature const* copy, Player* owner)
 std::string ClasslessMgr::NemesisTitle(NemesisMark const& mark, Player* player)
 {
     if (mark.kind == NEMESIS_SWORN)
-        return LocaleText(player, "Bloodsworn", "Клятвопреступник");
+        return LocaleText(player, "Bloodsworn", "Связанный кровной клятвой");
     if (mark.kills >= 3)
         return LocaleText(player, "Thrice-Victorious", "Трижды победитель");
     if (mark.kills == 2)
@@ -4643,7 +4643,7 @@ void ClasslessMgr::PushNemesisList(Player* player)
         lines.push_back(Acore::StringFormat("NL|{}|{}|{}|{}|{}|{}|{}|{:.1f}|{:.1f}",
             CreatureNameFor(player, mark.entry), NemesisTitle(mark, player),
             LocaleText(player, mark.kind == NEMESIS_SWORN ? "Sworn" : "Marked",
-                       mark.kind == NEMESIS_SWORN ? "Призванная" : "Отмеченная"),
+                       mark.kind == NEMESIS_SWORN ? "Связанная клятвой" : "Помеченная"),
             uint32(NemesisCopyLevel(player, mark) > player->GetLevel() ? NemesisCopyLevel(player, mark) - player->GetLevel() : 0),
             strengths, weakness, zoneName, x, y));
     }
@@ -4889,7 +4889,7 @@ void ClasslessMgr::NemesisSlain(Player* player, Creature* creature)
             "|cff00ff00Ваша Немезида погибла.|r {} повержено. Вы получили ещё {} опыта за победу."),
             CreatureNameFor(player, creature->GetEntry()), bonus));
     Msg(player, Acore::StringFormat(LocaleText(player, "Vengeance |cffffd100+{}|r: {} of {}.",
-        "Возмездие |cffffd100+{}|r: {} из {}."), vengeance, st->nemesisVengeance,
+        "Мщение |cffffd100+{}|r: {} из {}."), vengeance, st->nemesisVengeance,
         cfg.nemesisVengeanceToFinish));
     PushRunTracker(player);
 
@@ -6719,7 +6719,7 @@ void ClasslessMgr::HandleLevelUp(Player* player, uint8 oldLevel)
                 ? cfg.nemesisVengeanceToFinish - st.nemesisVengeance : 0;
             Msg(player, Acore::StringFormat(LocaleText(player,
                 "|cffffd100Nemesis|r: level {} reached. Gain {} more Vengeance to finish.",
-                "|cffffd100Немезида|r: достигнут {} уровень. Наберите ещё {} возмездия, чтобы завершить испытание."),
+                "|cffffd100Немезида|r: достигнут {} уровень. Наберите ещё {} мщения, чтобы завершить испытание."),
                 uint32(newLevel), left));
         }
     }
@@ -8236,7 +8236,7 @@ bool ClasslessMgr::UnlearnAbility(Player* player, uint32 firstSpellId, std::stri
     if (st.abilities[e->firstSpellId].source == GrantSource::Heirloom)
     {
         if (err) *err = LocaleText(player, "That is an heirloom carried through Rebirth. It stays with you.",
-            "Это унаследованная способность, сохранённая при Перерождении. Она останется с вами.");
+            "Это фамильная способность, сохранённая при Перерождении. Она останется с вами.");
         return false;
     }
 
@@ -8331,7 +8331,7 @@ bool ClasslessMgr::BuyTalentRank(Player* player, uint32 talentId, std::string* e
     if (cfg.respectLevelReqs && player->GetLevel() < 10 + t->row * 5)
     {
         if (err) *err = Acore::StringFormat(LocaleText(player, "That talent tier requires level {}.",
-            "Для этого уровня таланта требуется {} уровень персонажа."), 10 + t->row * 5);
+            "Этот ярус талантов доступен с {}-го уровня."), 10 + t->row * 5);
         return false;
     }
 
@@ -8390,7 +8390,7 @@ bool ClasslessMgr::Respec(Player* player, std::string* err)
     SaveState(player);
     Msg(player, Acore::StringFormat(LocaleText(player,
         "Respec complete. Ability Essence: |cff00ff00{}|r, Talent Essence: |cff00ff00{}|r.",
-        "Сброс завершён. Эссенция способностей: |cff00ff00{}|r, эссенция талантов: |cff00ff00{}|r."),
+        "Сброс сборки завершён. Эссенция способностей: |cff00ff00{}|r, эссенция талантов: |cff00ff00{}|r."),
         st.abilityEssence, st.talentEssence));
     // Everything is gone, so every class line is provably empty: clear
     // them now rather than leave stale empty tabs until the next login.
@@ -8994,7 +8994,7 @@ bool ClasslessMgr::Reroll(Player* player, bool isTalent, uint32 entry, std::stri
         if (st.abilities[e->firstSpellId].source == GrantSource::Heirloom)
         {
             if (err) *err = LocaleText(player, "That is an heirloom carried through Rebirth. It is not rerolled.",
-                "Это унаследованная способность, сохранённая при Перерождении. Её нельзя перебросить.");
+                "Это фамильная способность, сохранённая при Перерождении. Её нельзя перебросить.");
             return false;
         }
 
@@ -9117,7 +9117,7 @@ bool ClasslessMgr::SetLock(Player* player, uint32 firstSpellId, bool locked, std
             ? LocaleText(player, "That came with a talent. It cannot be rerolled, so there is nothing to lock.",
                          "Эта способность получена вместе с талантом и не перебрасывается, поэтому её нельзя закрепить.")
             : LocaleText(player, "That is an heirloom. It is never rerolled, so there is nothing to lock.",
-                         "Это унаследованная способность, её нельзя перебросить или закрепить.");
+                         "Это фамильная способность, её нельзя перебросить или закрепить.");
         return false;
     }
 
