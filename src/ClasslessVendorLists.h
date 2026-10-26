@@ -37,7 +37,7 @@ namespace ClasslessWildcard
         { "Weapons", "every blade, bow, staff and wand", "Оружие", "все клинки, луки, посохи и жезлы" },
         { "Armor", "chest, legs, shoulders, cloaks and shields", "Доспехи", "нагрудники, поножи, наплечники, плащи и щиты" },
         { "Jewelry & off-hand", "necks, rings, trinkets and held items", "Украшения и предметы в левой руке", "ожерелья, кольца, аксессуары и предметы в левой руке" },
-        { "Heirloom gear", "bought once, it scales with you to 80", "Наследуемое снаряжение", "покупается один раз и растёт вместе с вами до 80-го уровня" },
+        { "Heirloom gear", "bought once, it scales with you to 80", "Фамильное снаряжение", "покупается один раз и растёт вместе с вами до 80-го уровня" },
     };
 
     constexpr VendorList VENDOR_LISTS[] =
@@ -57,7 +57,7 @@ namespace ClasslessWildcard
         { 990222, 2, "Levels 41-60", "Уровни 41–60", 8, false },
         { 990223, 2, "Levels 61-80", "Уровни 61–80", 8, false },
         { 990224, 2, "All levels", "Все уровни", 42, true },
-        { 990234, 3, "Heirloom gear", "Наследуемое снаряжение", 23, true },
+        { 990234, 3, "Heirloom gear", "Фамильное снаряжение", 23, true },
     };
 
     // The supplies counter is the creature's own list, which
