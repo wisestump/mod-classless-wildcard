@@ -4151,9 +4151,12 @@ void ClasslessMgr::NemesisSay(Player* player, Creature* copy, std::string const&
 {
     if (!player || !copy || !player->GetSession())
         return;
+    std::string message = text;
+    if (emote)
+        message = Acore::StringFormat("{} {}", CreatureNameFor(player, copy->GetEntry()), text);
     WorldPacket data;
     ChatHandler::BuildChatPacket(data, emote ? CHAT_MSG_MONSTER_EMOTE : CHAT_MSG_MONSTER_SAY, LANG_UNIVERSAL,
-                                 copy, player, text, 0, "",
+                                 copy, player, message, 0, "",
                                  player->GetSession()->GetSessionDbLocaleIndex());
     player->SendDirectMessage(&data);
 }
