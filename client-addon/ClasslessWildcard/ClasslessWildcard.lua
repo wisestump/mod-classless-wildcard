@@ -2,6 +2,12 @@
 -- WotLK 3.3.5a client. Talks to the server over the "CWCL" addon channel.
 
 local PREFIX = "CWCL"
+-- Some 3.3.5 clients omit heirloom quality (7) from this table even though
+-- LootFrame indexes it directly when showing loot. Keep heirloom item quality
+-- intact for the client's scaling system and give the loot frame its color.
+if ITEM_QUALITY_COLORS and not ITEM_QUALITY_COLORS[7] then
+    ITEM_QUALITY_COLORS[7] = { r = 0.9, g = 0.8, b = 0.5, hex = "ffe6cc80" }
+end
 -- Reveal and starting-hand animation timings. One table, not nine
 -- locals: Lua 5.1 gives the main chunk 200 and this file lives near
 -- that ceiling -- go over and nothing below the offending line is
