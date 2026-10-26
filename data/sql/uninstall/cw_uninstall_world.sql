@@ -90,9 +90,9 @@ DELETE FROM `conditions` WHERE `SourceTypeOrReferenceId` = 23 AND `SourceGroup` 
 -- Russian names and descriptions shipped by the module.
 DELETE FROM `creature_template_locale` WHERE `locale` = 'ruRU'
   AND `entry` IN (990099, 990100, 990110, 990111, 990112, 990113, 990114, 990115,
-                  990117, 990118, 990119, 991000, 991001, 991002, 991003, 991004,
-                  991010, 991011, 991012, 991013, 991014, 991020, 991021, 991022,
-                  991023, 991024, 991034);
+                  990117, 990118, 990119, 990200, 990201, 990202, 990203, 990204,
+                  990210, 990211, 990212, 990213, 990214, 990220, 990221, 990222,
+                  990223, 990224, 990234);
 DELETE FROM `item_template_locale` WHERE `locale` = 'ruRU'
   AND (`ID` = 990101
     OR `ID` BETWEEN 990201 AND 990212
@@ -104,14 +104,14 @@ DELETE FROM `item_template_locale` WHERE `locale` = 'ruRU'
     OR `ID` = 991030);
 
 -- The split vendor lists: one packet holds 150 items, so the catalogue is
--- spread over lists 990110+, each fronted by its own unspawned creature_template
+-- spread over lists 990200+, each fronted by its own unspawned creature_template
 -- clone. Remove those with their rows.
 DELETE FROM `npc_vendor` WHERE `entry` BETWEEN 990110 AND 990209;
 DELETE FROM `creature_template_model` WHERE `CreatureID` BETWEEN 990110 AND 990209;
 DELETE FROM `creature_template` WHERE `entry` BETWEEN 990110 AND 990209;
-DELETE FROM `npc_vendor` WHERE `entry` BETWEEN 991000 AND 991099;
-DELETE FROM `creature_template_model` WHERE `CreatureID` BETWEEN 991000 AND 991099;
-DELETE FROM `creature_template` WHERE `entry` BETWEEN 991000 AND 991099;
+DELETE FROM `npc_vendor` WHERE `entry` BETWEEN 990200 AND 990299;
+DELETE FROM `creature_template_model` WHERE `CreatureID` BETWEEN 990200 AND 990299;
+DELETE FROM `creature_template` WHERE `entry` BETWEEN 990200 AND 990299;
 
 -- Hero Advancement NPC: vendor, template and spawns (schema-adaptive:
 -- playerbots forks use creature.id1, stock uses creature.id)

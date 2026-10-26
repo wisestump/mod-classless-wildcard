@@ -184,7 +184,7 @@ def expected_creature_entries() -> set[int]:
     """IDs defined by the module's own fixed creature SQL and generated vendor lists."""
     entries: set[int] = set()
     for filename in ("cw_world_base.sql", "cw_world_challenges.sql",
-                     "cw_z_summon_templates.sql"):
+                     "cw_spells_forged.sql"):
         columns, rows = read_insert_rows(os.path.join(WORLD, filename), "creature_template")
         if columns:
             entry_column = columns.index("entry")
