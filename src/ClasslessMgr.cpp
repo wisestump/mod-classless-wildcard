@@ -4779,9 +4779,9 @@ std::string ClasslessMgr::MarkNemesis(Player* player, Creature* killer)
         PushRunTracker(player);
         return itr->second.StrengthCount() > before
             ? Acore::StringFormat(LocaleText(player, "{} has beaten you again. It grows, and it is stronger.",
-                "{} снова победило вас. Немезида выросла и стала сильнее."), CreatureNameFor(player, killer->GetEntry()))
+                "Существо «{}» снова победило вас. Немезида выросла и стала сильнее."), CreatureNameFor(player, killer->GetEntry()))
             : Acore::StringFormat(LocaleText(player, "{} has beaten you again, and grows.",
-                "{} снова победило вас и выросло."), CreatureNameFor(player, killer->GetEntry()));
+                "Существо «{}» снова победило вас и выросло."), CreatureNameFor(player, killer->GetEntry()));
     }
 
     if (killer->IsPet() || killer->IsTotem() || killer->GetOwnerGUID() || !killer->GetSpawnId())
@@ -4812,7 +4812,7 @@ std::string ClasslessMgr::MarkNemesis(Player* player, Creature* killer)
     uint32 const level = NemesisCopyLevel(player, mark);
     if (!fresh)
         return Acore::StringFormat(LocaleText(player, "{} has beaten you again, and grows.",
-            "{} снова победило вас и выросло."), CreatureNameFor(player, killer->GetEntry()));
+            "Существо «{}» снова победило вас и выросло."), CreatureNameFor(player, killer->GetEntry()));
     return Acore::StringFormat(LocaleText(player,
         "{} is your nemesis now. It waits for you where it lives, a level {} rare elite.",
         "{} теперь ваша Немезида. Это редкий элитный противник {} уровня, который ждёт вас в своём логове."),
