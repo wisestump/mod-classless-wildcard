@@ -759,10 +759,16 @@ void ClasslessMgr::BuildLibrary()
         uint32 const slaClassMask = classMaskOf(sla);
         if (!slaClassMask)
             continue;
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(sla->Spell);
         // Which class this row is FOR, as opposed to whether it belongs to one.
         uint32 const spellReal = realMaskOf(sla->Spell);
         uint32 const attribMask = spellReal ? spellReal : slaClassMask;
-        if (!cfg.includeRacials && sla->RaceMask)
+        // The four Paladin class mounts on SkillLine 777 carry RaceMask in
+        // DBC to restrict them to races that can be Paladins in the stock
+        // game. They are class abilities, not racial spells; Heroes can be
+        // every race, so keep them even when racial abilities are disabled.
+        bool const classMount = info && info->HasAura(SPELL_AURA_MOUNTED);
+        if (!cfg.includeRacials && sla->RaceMask && !classMount)
             continue;
         // Attribution, not admission: without it the Death Knight mount came in
         // through the Mounts line as a paladin spell even with IncludeDeathKnight off.
@@ -780,8 +786,6 @@ void ClasslessMgr::BuildLibrary()
         // still lands in the right tab if a Hero gets it some other way.
         _spellSkillLine[sla->Spell] = uint16(sla->SkillLine);
         _classSkillLines.insert(uint16(sla->SkillLine));
-
-        SpellInfo const* info = sSpellMgr->GetSpellInfo(sla->Spell);
 
         // Spells the core hands out free with the line itself -- the ones a
         // Hero can end up with by owning nothing, and which StripUnearnedSpells
